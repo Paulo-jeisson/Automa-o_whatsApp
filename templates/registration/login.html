@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Entrar | ZapFluxo{% endblock %}
+
+{% block body %}
+<main class="login-page">
+  <section class="login-card" aria-label="Login">
+    <div class="login-brand">
+      <span class="brand-mark">Z</span>
+      <div>
+        <strong>ZapFluxo</strong>
+        <small>Atendimento via WhatsApp para negocios locais</small>
+      </div>
+    </div>
+
+    <div class="login-heading">
+      <span class="eyebrow">Acesso do dono</span>
+      <h1>Entre no painel</h1>
+      <p>Organize seus atendimentos em uma area simples e segura.</p>
+    </div>
+
+    {% if form.errors %}
+      <div class="alert">Usuario ou senha invalidos.</div>
+    {% endif %}
+
+    <form method="post" class="form-stack">
+      {% csrf_token %}
+      <label for="{{ form.username.id_for_label }}">Usuario</label>
+      {{ form.username }}
+
+      <label for="{{ form.password.id_for_label }}">Senha</label>
+      {{ form.password }}
+
+      <button class="btn btn-primary" type="submit">Entrar</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

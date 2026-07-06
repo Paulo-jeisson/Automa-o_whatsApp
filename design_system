@@ -1,0 +1,222 @@
+```xml
+<design_system>
+  <project_name>ZapFluxo</project_name>
+
+  <brand>
+    <positioning>
+      Sistema simples de automação de atendimento via WhatsApp para negócios locais.
+    </positioning>
+    <personality>
+      Profissional, simples, rápido, confiável e acessível.
+    </personality>
+  </brand>
+
+  <visual_identity>
+    <colors>
+      <primary name="Verde WhatsApp" hex="#25D366" usage="Botões principais, destaques e ações positivas"/>
+      <secondary name="Azul Profissional" hex="#2563EB" usage="Links, menus ativos e elementos de confiança"/>
+      <dark name="Cinza Escuro" hex="#111827" usage="Textos principais, sidebar e títulos"/>
+      <muted name="Cinza Médio" hex="#6B7280" usage="Textos secundários"/>
+      <light name="Cinza Claro" hex="#F3F4F6" usage="Backgrounds suaves"/>
+      <white name="Branco" hex="#FFFFFF" usage="Cards e áreas principais"/>
+      <danger name="Vermelho" hex="#EF4444" usage="Erros, exclusões e alertas críticos"/>
+      <warning name="Amarelo" hex="#F59E0B" usage="Avisos e pendências"/>
+      <success name="Verde" hex="#22C55E" usage="Status concluído e confirmações"/>
+    </colors>
+
+    <typography>
+      <font_family>Inter, Arial, sans-serif</font_family>
+      <heading weight="700" usage="Títulos de páginas e seções"/>
+      <subtitle weight="600" usage="Subtítulos e cards"/>
+      <body weight="400" usage="Textos gerais"/>
+      <small weight="400" usage="Ajuda, descrições e informações secundárias"/>
+    </typography>
+
+    <spacing>
+      <xs>4px</xs>
+      <sm>8px</sm>
+      <md>16px</md>
+      <lg>24px</lg>
+      <xl>32px</xl>
+      <xxl>48px</xxl>
+    </spacing>
+
+    <radius>
+      <small>8px</small>
+      <medium>12px</medium>
+      <large>18px</large>
+      <pill>999px</pill>
+    </radius>
+
+    <shadow>
+      <card>0 4px 12px rgba(0, 0, 0, 0.08)</card>
+      <modal>0 12px 32px rgba(0, 0, 0, 0.18)</modal>
+    </shadow>
+  </visual_identity>
+
+  <layout>
+    <dashboard>
+      <sidebar>
+        <background>#111827</background>
+        <text_color>#FFFFFF</text_color>
+        <active_item_background>#25D366</active_item_background>
+        <items>
+          <item>Dashboard</item>
+          <item>Atendimentos</item>
+          <item>Fluxo</item>
+          <item>Minha Empresa</item>
+          <item>Configurações</item>
+        </items>
+      </sidebar>
+
+      <topbar>
+        <height>64px</height>
+        <background>#FFFFFF</background>
+        <content>Nome da empresa, status da conta e botão de WhatsApp</content>
+      </topbar>
+
+      <content>
+        <background>#F3F4F6</background>
+        <max_width>1200px</max_width>
+        <padding>24px</padding>
+      </content>
+    </dashboard>
+
+    <mobile>
+      <navigation>Menu inferior ou sidebar recolhível</navigation>
+      <cards>Cards em coluna única</cards>
+      <buttons>Botões grandes, fáceis de tocar</buttons>
+    </mobile>
+  </layout>
+
+  <components>
+    <button>
+      <primary>
+        <background>#25D366</background>
+        <text>#FFFFFF</text>
+        <border_radius>12px</border_radius>
+        <usage>Ações principais como salvar, avisar no WhatsApp e iniciar atendimento</usage>
+      </primary>
+      <secondary>
+        <background>#2563EB</background>
+        <text>#FFFFFF</text>
+        <border_radius>12px</border_radius>
+        <usage>Ações de navegação e edição</usage>
+      </secondary>
+      <outline>
+        <background>transparent</background>
+        <border>#D1D5DB</border>
+        <text>#111827</text>
+        <usage>Ações secundárias</usage>
+      </outline>
+      <danger>
+        <background>#EF4444</background>
+        <text>#FFFFFF</text>
+        <usage>Excluir ou cancelar</usage>
+      </danger>
+    </button>
+
+    <card>
+      <background>#FFFFFF</background>
+      <border_radius>18px</border_radius>
+      <shadow>0 4px 12px rgba(0, 0, 0, 0.08)</shadow>
+      <padding>24px</padding>
+      <usage>Métricas, atendimentos, blocos de fluxo e configurações</usage>
+    </card>
+
+    <status_badges>
+      <badge name="Novo" background="#DCFCE7" text="#166534"/>
+      <badge name="Em andamento" background="#FEF3C7" text="#92400E"/>
+      <badge name="Finalizado" background="#DBEAFE" text="#1E40AF"/>
+      <badge name="Inativo" background="#FEE2E2" text="#991B1B"/>
+    </status_badges>
+
+    <form>
+      <input_height>44px</input_height>
+      <border>#D1D5DB</border>
+      <border_radius>10px</border_radius>
+      <focus_border>#25D366</focus_border>
+      <label_color>#374151</label_color>
+      <help_text_color>#6B7280</help_text_color>
+    </form>
+
+    <table>
+      <header_background>#F9FAFB</header_background>
+      <row_background>#FFFFFF</row_background>
+      <border>#E5E7EB</border>
+      <usage>Lista de atendimentos</usage>
+    </table>
+  </components>
+
+  <screens>
+    <screen name="Landing Page">
+      <sections>
+        <section>Hero com chamada principal</section>
+        <section>Como funciona</section>
+        <section>Segmentos atendidos</section>
+        <section>Benefícios</section>
+        <section>Planos</section>
+        <section>Chamada para WhatsApp</section>
+      </sections>
+    </screen>
+
+    <screen name="Dashboard">
+      <components>
+        <component>Card Total de Atendimentos</component>
+        <component>Card Atendimentos Hoje</component>
+        <component>Card Novos</component>
+        <component>Lista Últimos Atendimentos</component>
+      </components>
+    </screen>
+
+    <screen name="Atendimentos">
+      <components>
+        <component>Filtros por status e data</component>
+        <component>Tabela/lista de atendimentos</component>
+        <component>Botão Avisar no WhatsApp</component>
+        <component>Botão Marcar como Finalizado</component>
+      </components>
+    </screen>
+
+    <screen name="Fluxo">
+      <components>
+        <component>Visual do fluxo em cards conectados</component>
+        <component>Entrada do cliente</component>
+        <component>Menu automático</component>
+        <component>Coleta de dados</component>
+        <component>Aviso ao dono</component>
+        <component>Finalização</component>
+      </components>
+    </screen>
+
+    <screen name="Minha Empresa">
+      <components>
+        <component>Formulário de dados da empresa</component>
+        <component>Campo WhatsApp do dono</component>
+        <component>Segmento</component>
+        <component>Mensagem inicial</component>
+        <component>Status ativo/inativo</component>
+      </components>
+    </screen>
+  </screens>
+
+  <ux_rules>
+    <rule>O usuário deve conseguir entender o painel em menos de 1 minuto.</rule>
+    <rule>Evitar telas cheias de informação.</rule>
+    <rule>Priorizar botões grandes e textos claros.</rule>
+    <rule>O botão de WhatsApp deve estar sempre visível onde fizer sentido.</rule>
+    <rule>Usar linguagem simples: Novo atendimento, Avisar dono, Finalizar.</rule>
+    <rule>Mobile first, pois muitos donos usarão pelo celular.</rule>
+  </ux_rules>
+
+  <copywriting>
+    <tone>Simples, direto e comercial</tone>
+    <examples>
+      <text>Organize seus atendimentos do WhatsApp sem trocar seu sistema atual.</text>
+      <text>Receba pedidos, dúvidas e contatos em um painel simples.</text>
+      <text>Quando chegar um novo atendimento, o dono é avisado pelo WhatsApp.</text>
+      <text>Ideal para clínicas, escritórios, estacionamentos e pequenos negócios.</text>
+    </examples>
+  </copywriting>
+</design_system>
+```

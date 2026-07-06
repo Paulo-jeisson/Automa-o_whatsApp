@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Atendimento | {{ empresa.nome }}{% endblock %}
+
+{% block body %}
+<main class="public-page">
+  <section class="public-chat">
+    <header class="public-header">
+      <div>
+        <span class="eyebrow">Atendimento simulado</span>
+        <h1>{{ empresa.nome }}</h1>
+      </div>
+      <span class="status-pill success">Online</span>
+    </header>
+
+    {% if atendimento_salvo %}
+      <div class="success-state">
+        <span class="brand-mark">OK</span>
+        <h2>Atendimento registrado</h2>
+        <p>{{ fluxo.pergunta_finalizacao }}</p>
+      </div>
+    {% endif %}
+
+    <div class="chat-stack" aria-label="Fluxo de atendimento">
+      <article class="chat-bubble bot">
+        <strong>{{ empresa.nome }}</strong>
+        <p>{{ fluxo.saudacao }}</p>
+      </article>
+
+      <article class="chat-bubble bot">
+        <strong>{{ fluxo.pergunta_menu }}</strong>
+        <div class="option-list">
+          {% for opcao in fluxo.opcoes %}
+            <span>{{ opcao }}</span>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="chat-bubble bot">
+        <strong>Dados do atendimento</strong>
+        <p>{{ fluxo.pergunta_dados }}</p>
+      </article>
+    </div>
+
+    <form method="post" class="public-form" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="form-grid public-form-grid">
+        {% for field in form %}
+          <div class="form-field {% if field.name == 'observacao' or field.name == 'necessidade' %}full{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+
+            {% if field.help_text %}
+              <small>{{ field.help_text }}</small>
+            {% endif %}
+
+            {% for error in field.errors %}
+              <span class="field-error">{{ error }}</span>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+
+      <button class="btn btn-primary public-submit" type="submit">Enviar atendimento</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

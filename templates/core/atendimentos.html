@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Atendimentos | ZapFluxo{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Menu principal">
+    <div class="brand">
+      <span class="brand-mark">Z</span>
+      <div>
+        <strong>ZapFluxo</strong>
+        <small>Atendimento simples</small>
+      </div>
+    </div>
+
+    <nav class="nav-list">
+      <a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a>
+      <a class="nav-item active" href="{% url 'atendimentos' %}">Atendimentos</a>
+      <a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a>
+      <a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a>
+      <span class="nav-item disabled">Configuracoes</span>
+    </nav>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar">
+      <div>
+        <span class="eyebrow">Painel de atendimentos</span>
+        <h1>{{ empresa.nome }}</h1>
+      </div>
+      <div class="topbar-actions">
+        <span class="status-pill {% if empresa.ativa %}success{% else %}warning{% endif %}">
+          {{ status_conta }}
+        </span>
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit">Sair</button>
+        </form>
+      </div>
+    </header>
+
+    <section class="content-grid" aria-label="Resumo de atendimentos">
+      <article class="metric-card">
+        <span class="metric-label">Total geral</span>
+        <strong class="metric-value">{{ total_atendimentos }}</strong>
+        <p>Todos os atendimentos recebidos.</p>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Atendimentos hoje</span>
+        <strong class="metric-value">{{ atendimentos_hoje }}</strong>
+        <p>Contatos registrados na data atual.</p>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Novos</span>
+        <strong class="metric-value">{{ novos_atendimentos }}</strong>
+        <p>Atendimentos ainda sem andamento.</p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <span class="eyebrow">Filtros</span>
+          <h2>Encontrar atendimentos</h2>
+        </div>
+      </div>
+
+      {% if messages %}
+        <div class="messages">
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="get" class="filters-form">
+        <div class="form-field">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            <option value="">Todos</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if filtros.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="data">Data</label>
+          <input id="data" type="date" name="data" value="{{ filtros.data }}">
+        </div>
+        <div class="form-field">
+          <label for="segmento">Segmento</label>
+          <select id="segmento" name="segmento">
+            <option value="">Todos</option>
+            {% for value, label in segmento_choices %}
+              <option value="{{ value }}" {% if filtros.segmento == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-primary" type="submit">Filtrar</button>
+          <a class="btn btn-outline" href="{% url 'atendimentos' %}">Limpar</a>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <span class="eyebrow">Lista</span>
+          <h2>Atendimentos recebidos</h2>
+        </div>
+      </div>
+
+      <div class="attendance-list">
+        {% for atendimento in atendimentos %}
+          <article class="attendance-card">
+            <div class="attendance-main">
+              <div>
+                <span class="eyebrow">{{ atendimento.criado_em|date:"d/m/Y H:i" }}</span>
+                <h3>{{ atendimento.nome_cliente }}</h3>
+              </div>
+              <span class="status-pill status-{{ atendimento.status }}">{{ atendimento.get_status_display }}</span>
+            </div>
+            <dl class="attendance-details">
+              <div>
+                <dt>Telefone</dt>
+                <dd>{{ atendimento.telefone_cliente }}</dd>
+              </div>
+              <div>
+                <dt>Opcao</dt>
+                <dd>{{ atendimento.opcao_escolhida }}</dd>
+              </div>
+              <div>
+                <dt>Segmento</dt>
+                <dd>{{ atendimento.empresa.get_segmento_display }}</dd>
+              </div>
+              <div class="full">
+                <dt>Necessidade</dt>
+                <dd>{{ atendimento.necessidade }}</dd>
+              </div>
+              <div>
+                <dt>Aviso ao dono</dt>
+                <dd>
+                  {% if atendimento.avisado_em %}
+                    Enviado em {{ atendimento.avisado_em|date:"d/m/Y H:i" }}
+                  {% else %}
+                    Ainda nao enviado
+                  {% endif %}
+                </dd>
+              </div>
+              {% if atendimento.observacao %}
+                <div class="full">
+                  <dt>Observacao</dt>
+                  <dd>{{ atendimento.observacao }}</dd>
+                </div>
+              {% endif %}
+            </dl>
+            <div class="attendance-actions">
+              <form method="post" action="{% url 'avisar_whatsapp_atendimento' atendimento.id %}" target="_blank" class="whatsapp-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="btn btn-primary" type="submit" {% if not empresa.whatsapp_dono %}disabled{% endif %}>
+                  Avisar no WhatsApp
+                </button>
+              </form>
+
+              <form method="post" action="{% url 'atualizar_status_atendimento' atendimento.id %}" class="status-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <select name="status" aria-label="Alterar status">
+                  {% for value, label in status_choices %}
+                    <option value="{{ value }}" {% if atendimento.status == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                <button class="btn btn-outline" type="submit">Atualizar</button>
+              </form>
+            </div>
+          </article>
+        {% empty %}
+          <div class="empty-state">
+            <h3>Nenhum atendimento encontrado</h3>
+            <p>Quando o simulador publico receber contatos, eles aparecem aqui.</p>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+</div>
+{% endblock %}

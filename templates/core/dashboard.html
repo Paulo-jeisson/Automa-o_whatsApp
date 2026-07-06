@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | ZapFluxo{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Menu principal">
+    <div class="brand">
+      <span class="brand-mark">Z</span>
+      <div>
+        <strong>ZapFluxo</strong>
+        <small>Atendimento simples</small>
+      </div>
+    </div>
+
+    <nav class="nav-list">
+      <a class="nav-item active" href="{% url 'dashboard' %}">Dashboard</a>
+      <a class="nav-item" href="{% url 'atendimentos' %}">Atendimentos</a>
+      <a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a>
+      <a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a>
+      <span class="nav-item disabled">Configuracoes</span>
+    </nav>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar">
+      <div>
+        <span class="eyebrow">Painel inicial</span>
+        <h1>{% if empresa %}{{ empresa.nome }}{% else %}Sua empresa{% endif %}</h1>
+      </div>
+      <div class="topbar-actions">
+        <span class="status-pill {% if empresa and empresa.ativa %}success{% else %}warning{% endif %}">
+          {{ status_conta }}
+        </span>
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit">Sair</button>
+        </form>
+      </div>
+    </header>
+
+    <section class="content-grid" aria-label="Resumo da conta">
+      <article class="metric-card">
+        <span class="metric-label">Total de atendimentos</span>
+        <strong class="metric-value">{{ total_atendimentos }}</strong>
+        <p>{% if empresa %}Atendimentos recebidos pelo simulador publico.{% else %}Cadastre uma empresa para ativar os dados.{% endif %}</p>
+      </article>
+
+      <article class="metric-card">
+        <span class="metric-label">Atendimentos hoje</span>
+        <strong class="metric-value">{{ atendimentos_hoje }}</strong>
+        <p>Novos contatos registrados na data atual.</p>
+      </article>
+
+      <article class="metric-card">
+        <span class="metric-label">Novos</span>
+        <strong class="metric-value">{{ novos_atendimentos }}</strong>
+        <p>Atendimentos aguardando acompanhamento.</p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <span class="eyebrow">Base do SaaS</span>
+          <h2>Estrutura inicial funcionando</h2>
+        </div>
+      </div>
+
+      <div class="check-list">
+        <div class="check-item done">
+          <span></span>
+          <p>Projeto Django configurado com app principal.</p>
+        </div>
+        <div class="check-item done">
+          <span></span>
+          <p>Login e logout usando autenticação do Django.</p>
+        </div>
+        <div class="check-item done">
+          <span></span>
+          <p>Modelo EmpresaCliente ligado ao usuario dono.</p>
+        </div>
+        <div class="check-item done">
+          <span></span>
+          <p>Dashboard protegido por login e filtrado pela empresa do usuario.</p>
+        </div>
+      </div>
+    </section>
+
+    {% if public_url %}
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <span class="eyebrow">Simulador publico</span>
+            <h2>Link de atendimento</h2>
+          </div>
+        </div>
+        <div class="public-link-box">
+          <input type="text" value="{{ public_url }}" readonly>
+          <a class="btn btn-primary" href="{{ public_url }}" target="_blank" rel="noopener">Abrir simulador</a>
+        </div>
+      </section>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}

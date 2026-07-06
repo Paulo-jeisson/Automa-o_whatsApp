@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Minha Empresa | ZapFluxo{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Menu principal">
+    <div class="brand">
+      <span class="brand-mark">Z</span>
+      <div>
+        <strong>ZapFluxo</strong>
+        <small>Atendimento simples</small>
+      </div>
+    </div>
+
+    <nav class="nav-list">
+      <a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a>
+      <a class="nav-item" href="{% url 'atendimentos' %}">Atendimentos</a>
+      <a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a>
+      <a class="nav-item active" href="{% url 'minha_empresa' %}">Minha Empresa</a>
+      <span class="nav-item disabled">Configuracoes</span>
+    </nav>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar">
+      <div>
+        <span class="eyebrow">Cadastro do negocio</span>
+        <h1>{% if empresa %}{{ empresa.nome }}{% else %}Minha Empresa{% endif %}</h1>
+      </div>
+      <div class="topbar-actions">
+        <span class="status-pill {% if empresa and empresa.ativa %}success{% else %}warning{% endif %}">
+          {{ status_conta }}
+        </span>
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit">Sair</button>
+        </form>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <span class="eyebrow">Dados principais</span>
+          <h2>Configure sua empresa</h2>
+        </div>
+      </div>
+
+      {% if messages %}
+        <div class="messages">
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="post" class="company-form" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+          <div class="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-field {% if field.name == 'mensagem_inicial' %}full{% endif %} {% if field.field.widget.input_type == 'checkbox' %}checkbox-field{% endif %}">
+              {% if field.field.widget.input_type == 'checkbox' %}
+                <label class="checkbox-label" for="{{ field.id_for_label }}">
+                  {{ field }}
+                  <span>{{ field.label }}</span>
+                </label>
+              {% else %}
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+              {% endif %}
+
+              {% if field.help_text %}
+                <small>{{ field.help_text }}</small>
+              {% endif %}
+
+              {% for error in field.errors %}
+                <span class="field-error">{{ error }}</span>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="form-actions">
+          <a class="btn btn-outline" href="{% url 'dashboard' %}">Voltar</a>
+          <button class="btn btn-primary" type="submit">Salvar empresa</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+{% endblock %}
