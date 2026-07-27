@@ -18,7 +18,7 @@
       <a class="nav-item" href="{% url 'atendimentos' %}">Atendimentos</a>
       <a class="nav-item active" href="{% url 'fluxo' %}">Fluxo</a>
       <a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a>
-      <span class="nav-item disabled">Configuracoes</span>
+      <a class="nav-item" href="{% url 'configuracoes' %}">Configurações</a>
     </nav>
   </aside>
 
@@ -43,7 +43,7 @@
       <div class="panel-header">
         <div>
           <span class="eyebrow">Visual do fluxo</span>
-          <h2>Entrada ate finalizacao</h2>
+          <h2>Entrada até a finalização</h2>
         </div>
       </div>
 
@@ -60,7 +60,7 @@
         </article>
         <article class="flow-card">
           <span class="flow-step">2</span>
-          <h3>Menu automatico</h3>
+          <h3>Menu automático</h3>
           <p>{{ fluxo.pergunta_menu }}</p>
           <ul>
             {% for opcao in fluxo.opcoes %}
@@ -76,7 +76,7 @@
         <article class="flow-card">
           <span class="flow-step">4</span>
           <h3>Aviso ao dono</h3>
-          <p>Os dados ficam prontos para aviso ao responsavel nas proximas sprints.</p>
+          <p>Os dados ficam prontos para avisar o responsável pelo WhatsApp.</p>
         </article>
         <article class="flow-card">
           <span class="flow-step">5</span>
@@ -89,8 +89,45 @@
     <section class="panel">
       <div class="panel-header">
         <div>
+          <span class="eyebrow">Templates por segmento</span>
+          <h2>Comece com um modelo pronto</h2>
+          <p class="panel-description">Escolha um segmento para adaptar as mensagens e opções do atendimento. Você poderá editar tudo depois.</p>
+        </div>
+      </div>
+
+      <div class="template-grid">
+        {% for template in templates_fluxo %}
+          <article class="template-card {% if template.ativo %}active{% endif %}">
+            <div class="template-card-header">
+              <span class="template-icon">{{ template.nome|slice:":1" }}</span>
+              {% if template.ativo %}
+                <span class="status-pill success">Em uso</span>
+              {% endif %}
+            </div>
+            <h3>{{ template.nome }}</h3>
+            <p>{{ template.descricao }}</p>
+            <ul>
+              {% for opcao in template.opcoes|slice:":3" %}
+                <li>{{ opcao }}</li>
+              {% endfor %}
+            </ul>
+            <form method="post" action="{% url 'aplicar_template_fluxo' %}">
+              {% csrf_token %}
+              <input type="hidden" name="segmento" value="{{ template.segmento }}">
+              <button class="btn {% if template.ativo %}btn-outline{% else %}btn-secondary{% endif %} template-action" type="submit">
+                {% if template.ativo %}Restaurar modelo{% else %}Usar este modelo{% endif %}
+              </button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
           <span class="eyebrow">Editar fluxo</span>
-          <h2>Perguntas e opcoes</h2>
+          <h2>Perguntas e opções</h2>
         </div>
       </div>
 

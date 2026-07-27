@@ -10,7 +10,7 @@ class EmpresaClienteForm(forms.ModelForm):
         label='WhatsApp do dono',
         required=False,
         max_length=20,
-        help_text='Use DDD e numero. Exemplo: 5588999999999.',
+        help_text='Use DDD e número. Exemplo: 5588999999999.',
     )
 
     class Meta:
@@ -29,18 +29,18 @@ class EmpresaClienteForm(forms.ModelForm):
             'mensagem_inicial': forms.Textarea(attrs={'rows': 4}),
         }
         labels = {
-            'nome': 'Nome do negocio',
+            'nome': 'Nome do negócio',
             'segmento': 'Segmento',
             'nome_dono': 'Nome do dono',
             'whatsapp_dono': 'WhatsApp do dono',
-            'endereco': 'Endereco',
-            'horario_funcionamento': 'Horario de funcionamento',
+            'endereco': 'Endereço',
+            'horario_funcionamento': 'Horário de funcionamento',
             'mensagem_inicial': 'Mensagem inicial',
             'ativa': 'Empresa ativa',
         }
         help_texts = {
-            'whatsapp_dono': 'Use DDD e numero. Exemplo: 5588999999999.',
-            'mensagem_inicial': 'Mensagem que sera usada como saudacao do atendimento.',
+            'whatsapp_dono': 'Use DDD e número. Exemplo: 5588999999999.',
+            'mensagem_inicial': 'Mensagem que será usada como saudação do atendimento.',
         }
 
     def clean_whatsapp_dono(self):
@@ -51,15 +51,15 @@ class EmpresaClienteForm(forms.ModelForm):
             return ''
 
         if len(digits) < 10 or len(digits) > 13:
-            raise forms.ValidationError('Informe um WhatsApp valido com DDD.')
+            raise forms.ValidationError('Informe um WhatsApp válido com DDD.')
 
         return digits
 
 
 class FluxoAtendimentoForm(forms.ModelForm):
     opcoes_texto = forms.CharField(
-        label='Opcoes do menu',
-        help_text='Digite uma opcao por linha.',
+        label='Opções do menu',
+        help_text='Digite uma opção por linha.',
         widget=forms.Textarea(attrs={'rows': 5}),
     )
 
@@ -73,7 +73,7 @@ class FluxoAtendimentoForm(forms.ModelForm):
             'opcoes_texto',
         ]
         labels = {
-            'saudacao': 'Saudacao automatica',
+            'saudacao': 'Saudação automática',
             'pergunta_menu': 'Pergunta do menu',
             'pergunta_dados': 'Pergunta para coleta de dados',
             'pergunta_finalizacao': 'Mensagem de finalizacao',
@@ -89,10 +89,10 @@ class FluxoAtendimentoForm(forms.ModelForm):
         opcoes = [line.strip() for line in value.splitlines() if line.strip()]
 
         if len(opcoes) < 2:
-            raise forms.ValidationError('Informe pelo menos duas opcoes para o menu.')
+            raise forms.ValidationError('Informe pelo menos duas opções para o menu.')
 
         if len(opcoes) > 8:
-            raise forms.ValidationError('Use no maximo oito opcoes para manter o fluxo simples.')
+            raise forms.ValidationError('Use no máximo oito opções para manter o fluxo simples.')
 
         return opcoes
 
@@ -108,7 +108,7 @@ class AtendimentoSimuladoForm(forms.ModelForm):
     telefone_cliente = forms.CharField(
         label='Telefone',
         max_length=20,
-        help_text='Informe DDD e numero.',
+        help_text='Informe DDD e número.',
     )
 
     class Meta:
@@ -125,13 +125,13 @@ class AtendimentoSimuladoForm(forms.ModelForm):
             'nome_cliente': 'Seu nome',
             'telefone_cliente': 'Telefone',
             'necessidade': 'Necessidade',
-            'observacao': 'Observacao',
+            'observacao': 'Observação',
         }
         widgets = {
             'observacao': forms.Textarea(attrs={'rows': 3}),
         }
         help_texts = {
-            'telefone_cliente': 'Informe DDD e numero.',
+            'telefone_cliente': 'Informe DDD e número.',
             'observacao': 'Opcional.',
         }
 
@@ -148,6 +148,56 @@ class AtendimentoSimuladoForm(forms.ModelForm):
         digits = re.sub(r'\D', '', value)
 
         if len(digits) < 10 or len(digits) > 13:
-            raise forms.ValidationError('Informe um telefone valido com DDD.')
+            raise forms.ValidationError('Informe um telefone válido com DDD.')
 
         return digits
+
+
+class ConfiguracoesContaForm(forms.Form):
+    first_name = forms.CharField(label='Nome', max_length=150, required=False)
+    last_name = forms.CharField(label='Sobrenome', max_length=150, required=False)
+    email = forms.EmailField(label='E-mail', required=False)
+    new_password = forms.CharField(
+        label='Nova senha',
+        required=False,
+        min_length=8,
+        widget=forms.PasswordInput,
+        help_text='Deixe em branco para manter a senha atual.',
+    )
+    confirm_password = forms.CharField(
+        label='Confirmar nova senha',
+        required=False,
+        widget=forms.PasswordInput,
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+        if user and not self.is_bound:
+            self.initial.update({
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'email': user.email,
+            })
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get('new_password')
+        confirmation = cleaned_data.get('confirm_password')
+
+        if password != confirmation:
+            self.add_error('confirm_password', 'As senhas informadas não são iguais.')
+        return cleaned_data
+
+    def save(self):
+        if self.user is None:
+            raise ValueError('Um usuário é obrigatório para salvar as configurações.')
+
+        self.user.first_name = self.cleaned_data['first_name']
+        self.user.last_name = self.cleaned_data['last_name']
+        self.user.email = self.cleaned_data['email']
+        password_changed = bool(self.cleaned_data.get('new_password'))
+        if password_changed:
+            self.user.set_password(self.cleaned_data['new_password'])
+        self.user.save()
+        return self.user, password_changed

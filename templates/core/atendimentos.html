@@ -18,7 +18,7 @@
       <a class="nav-item active" href="{% url 'atendimentos' %}">Atendimentos</a>
       <a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a>
       <a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a>
-      <span class="nav-item disabled">Configuracoes</span>
+      <a class="nav-item" href="{% url 'configuracoes' %}">Configurações</a>
     </nav>
   </aside>
 
@@ -127,7 +127,7 @@
                 <dd>{{ atendimento.telefone_cliente }}</dd>
               </div>
               <div>
-                <dt>Opcao</dt>
+                <dt>Opção</dt>
                 <dd>{{ atendimento.opcao_escolhida }}</dd>
               </div>
               <div>
@@ -140,17 +140,18 @@
               </div>
               <div>
                 <dt>Aviso ao dono</dt>
-                <dd>
+                <dd class="notice-detail">
                   {% if atendimento.avisado_em %}
-                    Enviado em {{ atendimento.avisado_em|date:"d/m/Y H:i" }}
+                    <span class="status-pill success">Avisado</span>
+                    <small>{{ atendimento.avisado_em|date:"d/m/Y H:i" }}</small>
                   {% else %}
-                    Ainda nao enviado
+                    <span class="status-pill warning">Pendente</span>
                   {% endif %}
                 </dd>
               </div>
               {% if atendimento.observacao %}
                 <div class="full">
-                  <dt>Observacao</dt>
+                  <dt>Observação</dt>
                   <dd>{{ atendimento.observacao }}</dd>
                 </div>
               {% endif %}
@@ -159,8 +160,8 @@
               <form method="post" action="{% url 'avisar_whatsapp_atendimento' atendimento.id %}" target="_blank" class="whatsapp-form">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <button class="btn btn-primary" type="submit" {% if not empresa.whatsapp_dono %}disabled{% endif %}>
-                  Avisar no WhatsApp
+                <button class="btn btn-primary" type="submit" {% if not empresa.whatsapp_dono %}disabled title="Cadastre o WhatsApp do dono em Minha Empresa"{% endif %}>
+                  {% if atendimento.avisado_em %}Avisar novamente{% else %}Avisar no WhatsApp{% endif %}
                 </button>
               </form>
 
@@ -179,7 +180,7 @@
         {% empty %}
           <div class="empty-state">
             <h3>Nenhum atendimento encontrado</h3>
-            <p>Quando o simulador publico receber contatos, eles aparecem aqui.</p>
+            <p>Quando o simulador público receber contatos, eles aparecerão aqui.</p>
           </div>
         {% endfor %}
       </div>

@@ -13,20 +13,46 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def load_local_env(path):
+    """Carrega .env local sem substituir variáveis definidas pelo ambiente."""
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+def env_list(name, default=''):
+    return [item.strip() for item in os.environ.get(name, default).split(',') if item.strip()]
+
+
+load_local_env(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-0xbj0vhh8c!(umsr@q$#jn)3q9o@2@0!(d76ekh3nu!_^tkwmp'
+DEBUG = os.environ.get('DEBUG', 'True').lower() in {'1', 'true', 'yes', 'on'}
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-development-only-change-me'
+    else:
+        raise ImproperlyConfigured('DJANGO_SECRET_KEY é obrigatória quando DEBUG=False.')
 
-ALLOWED_HOSTS = []
+PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', '').rstrip('/')
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', '127.0.0.1,localhost,testserver')
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
 
 
 # Application definition
@@ -123,5 +149,45 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
+
+ZAPFLUXO_WHATSAPP = ''.join(
+    character for character in os.environ.get('ZAPFLUXO_WHATSAPP', '')
+    if character.isdigit()
+)
+
+WHATSAPP_PROVIDER = os.environ.get('WHATSAPP_PROVIDER', 'wa.me')
+
+META_VERIFY_TOKEN = os.environ.get('META_VERIFY_TOKEN', '')
+META_APP_SECRET = os.environ.get('META_APP_SECRET', '')
+META_GRAPH_API_VERSION = os.environ.get('META_GRAPH_API_VERSION', 'v23.0')
+# Apenas para desenvolvimento com uma única conta de teste. Não é persistido
+# nem exibido e deverá ser substituído por cofre/criptografia no multiempresa.
+META_ACCESS_TOKEN = os.environ.get('META_ACCESS_TOKEN', '')
+WHATSAPP_WEBHOOK_MAX_BYTES = int(os.environ.get('WHATSAPP_WEBHOOK_MAX_BYTES', 1_048_576))
+DATA_UPLOAD_MAX_MEMORY_SIZE = WHATSAPP_WEBHOOK_MAX_BYTES
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'whatsapp': {
+            'format': '{levelname} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'whatsapp',
+        },
+    },
+    'loggers': {
+        'whatsapp': {
+            'handlers': ['console'],
+            'level': os.environ.get('WHATSAPP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

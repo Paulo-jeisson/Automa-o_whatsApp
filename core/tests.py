@@ -1,12 +1,134 @@
+from io import StringIO
 from urllib.parse import parse_qs, urlparse
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from .forms import AtendimentoSimuladoForm, EmpresaClienteForm, FluxoAtendimentoForm
-from .models import Atendimento, EmpresaCliente, FluxoAtendimento
+from .models import Atendimento, EmpresaCliente, FluxoAtendimento, dados_padrao_fluxo
+from .services.whatsapp import (
+    OfficialApiProvider,
+    WhatsAppProviderError,
+    build_attendance_message,
+    get_provider,
+    notify_attendance,
+)
+
+
+class LandingPageTests(TestCase):
+    def test_landing_page_is_public_and_contains_commercial_sections(self):
+        response = self.client.get(reverse('landing_page'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Organize seus atendimentos do WhatsApp')
+        self.assertContains(response, 'Como funciona')
+        self.assertContains(response, 'Segmentos')
+        self.assertContains(response, 'Benefícios')
+        self.assertContains(response, 'Planos simples')
+
+    def test_landing_page_has_login_link(self):
+        response = self.client.get(reverse('landing_page'))
+
+        self.assertContains(response, reverse('login'))
+
+
+class MvpFinalizationTests(TestCase):
+    def test_seed_demo_is_idempotent(self):
+        output = StringIO()
+
+        call_command('seed_demo', stdout=output)
+        call_command('seed_demo', stdout=output)
+
+        company = EmpresaCliente.objects.get(usuario__username='demo')
+        self.assertEqual(company.atendimentos.count(), 6)
+        self.assertTrue(FluxoAtendimento.objects.filter(empresa=company).exists())
+        self.assertIn('Demonstração pronta', output.getvalue())
+
+    def test_complete_customer_flow_reaches_owner_panel(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='dono-final', password='senha-segura')
+        company = EmpresaCliente.objects.create(
+            usuario=user,
+            nome='Negócio Final',
+            whatsapp_dono='5511999999999',
+        )
+        flow = FluxoAtendimento.objects.create(
+            empresa=company,
+            **dados_padrao_fluxo(company),
+        )
+
+        public_response = self.client.post(
+            reverse('atendimento_publico', args=[company.public_slug]),
+            {
+                'opcao_escolhida': flow.opcoes[0],
+                'nome_cliente': 'Cliente Ponta a Ponta',
+                'telefone_cliente': '11988887777',
+                'necessidade': 'Precisa de atendimento.',
+                'observacao': '',
+            },
+        )
+        self.assertEqual(public_response.status_code, 200)
+
+        self.client.login(username='dono-final', password='senha-segura')
+        dashboard_response = self.client.get(reverse('dashboard'))
+        attendance_response = self.client.get(reverse('atendimentos'))
+
+        self.assertContains(dashboard_response, 'Cliente Ponta a Ponta')
+        self.assertContains(attendance_response, 'Cliente Ponta a Ponta')
+        self.assertContains(attendance_response, 'Avisar no WhatsApp')
+
+
+class WhatsAppServiceTests(TestCase):
+    def create_attendance(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='servico', password='senha-segura')
+        company = EmpresaCliente.objects.create(
+            usuario=user,
+            nome='Estacionamento Central',
+            whatsapp_dono='(88) 99999-9999',
+        )
+        return Atendimento.objects.create(
+            empresa=company,
+            nome_cliente='João',
+            telefone_cliente='88988887777',
+            opcao_escolhida='Saber preço',
+            necessidade='Quer saber a diária.',
+            observacao='Carro pequeno.',
+        )
+
+    def test_default_provider_builds_encoded_wame_url(self):
+        attendance = self.create_attendance()
+
+        result = notify_attendance(attendance)
+        parsed_url = urlparse(result.redirect_url)
+        message = parse_qs(parsed_url.query)['text'][0]
+
+        self.assertEqual(result.provider, 'wa.me')
+        self.assertEqual(parsed_url.netloc, 'wa.me')
+        self.assertEqual(parsed_url.path, '/88999999999')
+        self.assertIn('Cliente: João', message)
+        self.assertIn('Opção: Saber preço', message)
+
+    def test_attendance_message_contains_optional_observation(self):
+        message = build_attendance_message(self.create_attendance())
+
+        self.assertIn('Observação: Carro pequeno.', message)
+
+    @override_settings(WHATSAPP_PROVIDER='official')
+    def test_future_provider_is_selectable_and_fails_safely(self):
+        self.assertIsInstance(get_provider(), OfficialApiProvider)
+
+        with self.assertRaisesMessage(WhatsAppProviderError, 'fase posterior'):
+            notify_attendance(self.create_attendance())
+
+    @override_settings(WHATSAPP_PROVIDER='desconhecido')
+    def test_invalid_provider_has_clear_configuration_error(self):
+        with self.assertRaisesMessage(WhatsAppProviderError, 'Provider "desconhecido" inválido'):
+            get_provider()
 
 
 class DashboardAccessTests(TestCase):
@@ -28,6 +150,21 @@ class DashboardAccessTests(TestCase):
 
         self.assertContains(response, 'Estacionamento Central')
         self.assertNotContains(response, 'Clinica Norte')
+
+    @override_settings(PUBLIC_BASE_URL='https://public.example')
+    def test_dashboard_uses_configured_public_url(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='dono-ngrok', password='senha-segura')
+        company = EmpresaCliente.objects.create(usuario=user, nome='Empresa Ngrok')
+        self.client.login(username='dono-ngrok', password='senha-segura')
+
+        response = self.client.get(reverse('dashboard'))
+
+        expected_url = (
+            'https://public.example'
+            f'{company.get_atendimento_url()}'
+        )
+        self.assertContains(response, expected_url)
 
 
 class MinhaEmpresaTests(TestCase):
@@ -94,6 +231,69 @@ class MinhaEmpresaTests(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn('whatsapp_dono', form.errors)
+
+
+class ConfiguracoesContaTests(TestCase):
+    def test_settings_require_login(self):
+        response = self.client.get(reverse('configuracoes'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('login'), response['Location'])
+
+    def test_user_can_update_own_profile(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='conta', password='senha-segura')
+        self.client.login(username='conta', password='senha-segura')
+
+        response = self.client.post(reverse('configuracoes'), {
+            'first_name': 'Paulo',
+            'last_name': 'Silva',
+            'email': 'paulo@example.com',
+            'new_password': '',
+            'confirm_password': '',
+        })
+
+        self.assertRedirects(response, reverse('configuracoes'))
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, 'Paulo')
+        self.assertEqual(user.last_name, 'Silva')
+        self.assertEqual(user.email, 'paulo@example.com')
+
+    def test_password_change_keeps_user_logged_in(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='conta', password='senha-antiga')
+        self.client.login(username='conta', password='senha-antiga')
+
+        response = self.client.post(reverse('configuracoes'), {
+            'first_name': '',
+            'last_name': '',
+            'email': '',
+            'new_password': 'senha-nova-segura',
+            'confirm_password': 'senha-nova-segura',
+        })
+
+        self.assertRedirects(response, reverse('configuracoes'))
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('senha-nova-segura'))
+        self.assertEqual(self.client.get(reverse('configuracoes')).status_code, 200)
+
+    def test_mismatched_passwords_are_rejected(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='conta', password='senha-antiga')
+        self.client.login(username='conta', password='senha-antiga')
+
+        response = self.client.post(reverse('configuracoes'), {
+            'first_name': '',
+            'last_name': '',
+            'email': '',
+            'new_password': 'senha-nova-segura',
+            'confirm_password': 'senha-diferente',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'As senhas informadas não são iguais.')
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('senha-antiga'))
 
 
 class FluxoAtendimentoTests(TestCase):
@@ -196,6 +396,70 @@ class FluxoAtendimentoTests(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn('opcoes_texto', form.errors)
+
+    def test_flow_page_shows_templates_for_commercial_segments(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='dono', password='senha-segura')
+        EmpresaCliente.objects.create(usuario=user, nome='Empresa Modelo')
+        self.client.login(username='dono', password='senha-segura')
+
+        response = self.client.get(reverse('fluxo'))
+
+        self.assertContains(response, 'Clínica')
+        self.assertContains(response, 'Advocacia')
+        self.assertContains(response, 'Estacionamento')
+        self.assertContains(response, 'Contabilidade')
+
+    def test_owner_can_apply_segment_template_to_own_flow(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='dono', password='senha-segura')
+        empresa = EmpresaCliente.objects.create(
+            usuario=user,
+            nome='Empresa Modelo',
+            segmento=EmpresaCliente.SEGMENTO_ESTACIONAMENTO,
+        )
+        fluxo = FluxoAtendimento.objects.create(
+            empresa=empresa,
+            saudacao='Fluxo antigo',
+            pergunta_menu='Pergunta antiga',
+            pergunta_dados='Dados antigos',
+            pergunta_finalizacao='Fim antigo',
+            opcoes=['Opcao antiga', 'Outra opcao'],
+        )
+        self.client.login(username='dono', password='senha-segura')
+
+        response = self.client.post(reverse('aplicar_template_fluxo'), {
+            'segmento': EmpresaCliente.SEGMENTO_CLINICA,
+        })
+
+        self.assertRedirects(response, reverse('fluxo'))
+        empresa.refresh_from_db()
+        fluxo.refresh_from_db()
+        self.assertEqual(empresa.segmento, EmpresaCliente.SEGMENTO_CLINICA)
+        self.assertIn('Agendar consulta', fluxo.opcoes)
+        self.assertIn(empresa.nome, fluxo.saudacao)
+
+    def test_invalid_template_does_not_change_flow(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='dono', password='senha-segura')
+        empresa = EmpresaCliente.objects.create(usuario=user, nome='Empresa Modelo')
+        fluxo = FluxoAtendimento.objects.create(
+            empresa=empresa,
+            saudacao='Fluxo preservado',
+            pergunta_menu='Menu',
+            pergunta_dados='Dados',
+            pergunta_finalizacao='Fim',
+            opcoes=['Opcao A', 'Opcao B'],
+        )
+        self.client.login(username='dono', password='senha-segura')
+
+        response = self.client.post(reverse('aplicar_template_fluxo'), {
+            'segmento': 'segmento-invalido',
+        })
+
+        self.assertRedirects(response, reverse('fluxo'))
+        fluxo.refresh_from_db()
+        self.assertEqual(fluxo.saudacao, 'Fluxo preservado')
 
 
 class AtendimentoPublicoTests(TestCase):
@@ -437,7 +701,25 @@ class PainelAtendimentosTests(TestCase):
         self.assertEqual(parsed_url.path, f'/{empresa.whatsapp_dono}')
         self.assertIn('Novo atendimento recebido:', query['text'][0])
         self.assertIn('Cliente: Cliente Dono', query['text'][0])
-        self.assertIn('Opcao: Saber preco', query['text'][0])
+        self.assertIn('Opção: Saber preco', query['text'][0])
+
+        panel_response = self.client.get(reverse('atendimentos'))
+        self.assertContains(panel_response, 'Avisado')
+        self.assertContains(panel_response, 'Avisar novamente')
+
+    def test_whatsapp_notice_rejects_unsafe_return_url_when_phone_is_missing(self):
+        user, empresa = self.criar_empresa_com_usuario()
+        empresa.whatsapp_dono = ''
+        empresa.save(update_fields=['whatsapp_dono'])
+        atendimento = self.criar_atendimento(empresa)
+        self.client.login(username=user.username, password='senha-segura')
+
+        response = self.client.post(
+            reverse('avisar_whatsapp_atendimento', args=[atendimento.id]),
+            {'next': 'https://site-malicioso.example/'},
+        )
+
+        self.assertRedirects(response, reverse('atendimentos'))
 
     def test_whatsapp_notice_cannot_touch_other_company_attendance(self):
         user, _empresa = self.criar_empresa_com_usuario()

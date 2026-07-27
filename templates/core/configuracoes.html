@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Configurações | ZapFluxo{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Menu principal">
+    <div class="brand">
+      <span class="brand-mark">Z</span>
+      <div><strong>ZapFluxo</strong><small>Atendimento simples</small></div>
+    </div>
+    <nav class="nav-list">
+      <a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a>
+      <a class="nav-item" href="{% url 'atendimentos' %}">Atendimentos</a>
+      <a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a>
+      <a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a>
+      <a class="nav-item active" href="{% url 'configuracoes' %}">Configurações</a>
+    </nav>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar">
+      <div>
+        <span class="eyebrow">Preferências da conta</span>
+        <h1>Configurações</h1>
+      </div>
+      <div class="topbar-actions">
+        <span class="status-pill {% if empresa and empresa.ativa %}success{% else %}warning{% endif %}">{{ status_conta }}</span>
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit">Sair</button>
+        </form>
+      </div>
+    </header>
+
+    <section class="settings-layout">
+      <div class="panel settings-main">
+        <div class="panel-header">
+          <div>
+            <span class="eyebrow">Dados de acesso</span>
+            <h2>Sua conta</h2>
+            <p class="panel-description">Atualize seus dados pessoais e, se necessário, defina uma nova senha.</p>
+          </div>
+        </div>
+
+        {% if messages %}
+          <div class="messages">
+            {% for message in messages %}
+              <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <form method="post" class="company-form" novalidate>
+          {% csrf_token %}
+          {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
+          <div class="form-grid">
+            {% for field in form %}
+              <div class="form-field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+                {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <a class="btn btn-outline" href="{% url 'dashboard' %}">Voltar</a>
+            <button class="btn btn-primary" type="submit">Salvar configurações</button>
+          </div>
+        </form>
+      </div>
+
+      <aside class="settings-summary">
+        <article class="settings-info-card">
+          <span class="eyebrow">Conta</span>
+          <strong>{{ request.user.username }}</strong>
+          <small>Usuário de acesso</small>
+        </article>
+        <article class="settings-info-card">
+          <span class="eyebrow">Empresa</span>
+          <strong>{% if empresa %}{{ empresa.nome }}{% else %}Não cadastrada{% endif %}</strong>
+          <a href="{% url 'minha_empresa' %}">Editar empresa →</a>
+        </article>
+        <article class="settings-info-card">
+          <span class="eyebrow">WhatsApp</span>
+          {% if whatsapp_integration %}
+            <strong>{% if whatsapp_integration.is_active %}Configurado{% else %}Inativo{% endif %}</strong>
+            <small>Phone Number ID: {{ whatsapp_integration.phone_number_id }}</small>
+            <small>WABA ID: {{ whatsapp_integration.whatsapp_business_account_id }}</small>
+            <small>
+              Última comunicação:
+              {% if whatsapp_integration.last_communication_at %}
+                {{ whatsapp_integration.last_communication_at|date:"d/m/Y H:i" }}
+              {% else %}
+                Ainda não recebida
+              {% endif %}
+            </small>
+            {% if whatsapp_integration.is_active %}
+              <form method="post" action="{% url 'testar_integracao_whatsapp' %}">
+                {% csrf_token %}
+                <button class="btn btn-outline settings-test-button" type="submit">Testar integração</button>
+              </form>
+            {% endif %}
+          {% else %}
+            <strong>Não configurado</strong>
+            <small>Cadastre a integração oficial pelo Django Admin.</small>
+          {% endif %}
+        </article>
+      </aside>
+    </section>
+  </main>
+</div>
+{% endblock %}

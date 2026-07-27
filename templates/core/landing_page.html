@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}ZapFluxo | Atendimento organizado pelo WhatsApp{% endblock %}
+
+{% block body %}
+<div class="landing-page">
+  <header class="landing-header">
+    <div class="landing-container landing-nav">
+      <a class="landing-brand" href="{% url 'landing_page' %}" aria-label="ZapFluxo, início">
+        <span class="brand-mark">Z</span>
+        <span>ZapFluxo</span>
+      </a>
+      <nav class="landing-nav-links" aria-label="Navegação principal">
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#segmentos">Segmentos</a>
+        <a href="#planos">Planos</a>
+      </nav>
+      <a class="btn btn-outline landing-login" href="{% url 'login' %}">Entrar no painel</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="landing-hero">
+      <div class="landing-container hero-grid">
+        <div class="hero-copy">
+          <span class="landing-kicker">Atendimento simples. Negócio organizado.</span>
+          <h1>Organize seus atendimentos do WhatsApp sem trocar seu sistema atual.</h1>
+          <p>Receba pedidos, dúvidas e contatos em um painel simples. Cada novo atendimento chega organizado e o responsável é avisado pelo WhatsApp.</p>
+          <div class="hero-actions">
+            {% if whatsapp_url %}
+              <a class="btn btn-primary btn-large" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Falar com um especialista</a>
+            {% else %}
+              <a class="btn btn-primary btn-large" href="#planos">Conhecer os planos</a>
+            {% endif %}
+            <a class="btn btn-outline btn-large" href="#como-funciona">Ver como funciona</a>
+          </div>
+          <div class="hero-trust" aria-label="Benefícios rápidos">
+            <span>✓ Sem instalação complexa</span>
+            <span>✓ Pronto para celular</span>
+          </div>
+        </div>
+
+        <div class="hero-preview" aria-label="Prévia do painel ZapFluxo">
+          <div class="preview-top">
+            <span class="preview-logo">Z</span>
+            <div><strong>Painel ZapFluxo</strong><small>Atendimentos de hoje</small></div>
+            <span class="status-badge status-new">Online</span>
+          </div>
+          <div class="preview-metrics">
+            <div><small>Hoje</small><strong>12</strong></div>
+            <div><small>Novos</small><strong>4</strong></div>
+          </div>
+          <div class="preview-list">
+            <div class="preview-item">
+              <span class="client-avatar">MS</span>
+              <div><strong>Marina Souza</strong><small>Agendar atendimento</small></div>
+              <span class="preview-time">Agora</span>
+            </div>
+            <div class="preview-item">
+              <span class="client-avatar blue">RC</span>
+              <div><strong>Rafael Costa</strong><small>Consultar preço</small></div>
+              <span class="preview-time">10 min</span>
+            </div>
+            <div class="preview-notice">✓ Responsável avisado no WhatsApp</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section" id="como-funciona">
+      <div class="landing-container">
+        <div class="section-heading">
+          <span class="landing-kicker">Como funciona</span>
+          <h2>Do primeiro contato ao aviso, tudo em um fluxo simples</h2>
+          <p>Você acompanha o que importa sem depender de planilhas ou mensagens perdidas.</p>
+        </div>
+        <div class="steps-grid">
+          <article class="landing-card step-card">
+            <span class="step-number">1</span>
+            <h3>Cliente inicia o contato</h3>
+            <p>Uma página de atendimento apresenta as opções configuradas para o seu negócio.</p>
+          </article>
+          <article class="landing-card step-card">
+            <span class="step-number">2</span>
+            <h3>Dados ficam organizados</h3>
+            <p>Nome, telefone e necessidade são registrados automaticamente no painel.</p>
+          </article>
+          <article class="landing-card step-card">
+            <span class="step-number">3</span>
+            <h3>O responsável é avisado</h3>
+            <p>Uma mensagem pronta é aberta no WhatsApp para agilizar o retorno ao cliente.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section section-soft" id="segmentos">
+      <div class="landing-container">
+        <div class="section-heading">
+          <span class="landing-kicker">Feito para negócios locais</span>
+          <h2>Um atendimento que se adapta ao seu segmento</h2>
+        </div>
+        <div class="segments-grid">
+          <article class="segment-card"><span>✚</span><strong>Clínicas</strong><small>Agendamentos e dúvidas</small></article>
+          <article class="segment-card"><span>§</span><strong>Advocacia</strong><small>Triagem de novos contatos</small></article>
+          <article class="segment-card"><span>Ⓟ</span><strong>Estacionamentos</strong><small>Preços e disponibilidade</small></article>
+          <article class="segment-card"><span>⌁</span><strong>Contabilidades</strong><small>Solicitações organizadas</small></article>
+          <article class="segment-card"><span>⌕</span><strong>Assistências</strong><small>Pedidos de orçamento</small></article>
+          <article class="segment-card"><span>▣</span><strong>Comércios</strong><small>Produtos e atendimento</small></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section">
+      <div class="landing-container benefits-grid">
+        <div>
+          <span class="landing-kicker">Benefícios</span>
+          <h2>Mais agilidade para sua equipe. Mais clareza para seus clientes.</h2>
+          <p class="benefits-intro">Comece com um fluxo enxuto e acompanhe cada oportunidade em um só lugar.</p>
+        </div>
+        <div class="benefits-list">
+          <article><span>✓</span><div><strong>Nenhum contato esquecido</strong><p>Veja novos atendimentos e acompanhe o status de cada um.</p></div></article>
+          <article><span>✓</span><div><strong>Configuração rápida</strong><p>Personalize mensagens e opções para a rotina do seu negócio.</p></div></article>
+          <article><span>✓</span><div><strong>Acesso de qualquer lugar</strong><p>Painel responsivo para usar no celular ou no computador.</p></div></article>
+          <article><span>✓</span><div><strong>Sem mudar sua operação</strong><p>O ZapFluxo funciona de forma independente do seu sistema atual.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section section-soft" id="planos">
+      <div class="landing-container">
+        <div class="section-heading">
+          <span class="landing-kicker">Planos simples</span>
+          <h2>Escolha o plano ideal para começar</h2>
+          <p>Sem taxa de instalação e com suporte para colocar seu fluxo no ar.</p>
+        </div>
+        <div class="pricing-grid">
+          <article class="landing-card pricing-card">
+            <h3>Essencial</h3>
+            <p>Para organizar o primeiro canal de atendimento.</p>
+            <div class="price"><strong>R$ 49</strong><span>/mês</span></div>
+            <ul><li>1 negócio</li><li>Painel de atendimentos</li><li>Fluxo personalizável</li><li>Aviso via WhatsApp</li></ul>
+            {% if whatsapp_url %}<a class="btn btn-outline btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Quero começar</a>{% else %}<a class="btn btn-outline btn-block" href="{% url 'login' %}">Quero começar</a>{% endif %}
+          </article>
+          <article class="landing-card pricing-card featured">
+            <span class="popular-badge">Mais escolhido</span>
+            <h3>Profissional</h3>
+            <p>Para quem recebe mais contatos e quer crescer.</p>
+            <div class="price"><strong>R$ 89</strong><span>/mês</span></div>
+            <ul><li>Tudo do Essencial</li><li>Até 3 fluxos de atendimento</li><li>Relatórios de desempenho</li><li>Suporte prioritário</li></ul>
+            {% if whatsapp_url %}<a class="btn btn-primary btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Escolher Profissional</a>{% else %}<a class="btn btn-primary btn-block" href="{% url 'login' %}">Escolher Profissional</a>{% endif %}
+          </article>
+          <article class="landing-card pricing-card">
+            <h3>Sob medida</h3>
+            <p>Para operações com necessidades específicas.</p>
+            <div class="price"><strong>Vamos conversar</strong></div>
+            <ul><li>Múltiplos negócios</li><li>Fluxos personalizados</li><li>Implantação assistida</li><li>Atendimento dedicado</li></ul>
+            {% if whatsapp_url %}<a class="btn btn-outline btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Falar com especialista</a>{% else %}<a class="btn btn-outline btn-block" href="{% url 'login' %}">Falar com especialista</a>{% endif %}
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-cta">
+      <div class="landing-container cta-inner">
+        <div><span class="landing-kicker">Comece agora</span><h2>Pronto para organizar seus atendimentos?</h2><p>Converse com a gente e veja como o ZapFluxo pode funcionar no seu negócio.</p></div>
+        {% if whatsapp_url %}<a class="btn btn-primary btn-large" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Falar no WhatsApp</a>{% else %}<a class="btn btn-primary btn-large" href="#planos">Ver planos</a>{% endif %}
+      </div>
+    </section>
+  </main>
+
+  <footer class="landing-footer">
+    <div class="landing-container">
+      <a class="landing-brand" href="{% url 'landing_page' %}"><span class="brand-mark">Z</span><span>ZapFluxo</span></a>
+      <p>Atendimentos organizados. Negócios mais ágeis.</p>
+      <span>© {% now "Y" %} ZapFluxo</span>
+    </div>
+  </footer>
+</div>
+{% endblock %}

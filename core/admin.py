@@ -1,5 +1,12 @@
 from django.contrib import admin
-from .models import Atendimento, EmpresaCliente, FluxoAtendimento
+from .models import (
+    Atendimento,
+    Contato,
+    EmpresaCliente,
+    FluxoAtendimento,
+    Mensagem,
+    WhatsAppIntegration,
+)
 
 
 @admin.register(EmpresaCliente)
@@ -19,7 +26,68 @@ class FluxoAtendimentoAdmin(admin.ModelAdmin):
 
 @admin.register(Atendimento)
 class AtendimentoAdmin(admin.ModelAdmin):
-    list_display = ('nome_cliente', 'telefone_cliente', 'empresa', 'opcao_escolhida', 'status', 'avisado_em', 'criado_em')
-    list_filter = ('status', 'avisado_em', 'criado_em')
+    list_display = ('nome_cliente', 'telefone_cliente', 'contato', 'empresa', 'opcao_escolhida', 'status', 'automation_enabled', 'avisado_em', 'criado_em')
+    list_filter = ('status', 'automation_enabled', 'avisado_em', 'criado_em')
     search_fields = ('nome_cliente', 'telefone_cliente', 'empresa__nome', 'opcao_escolhida')
+    autocomplete_fields = ('empresa', 'contato')
+
+
+@admin.register(WhatsAppIntegration)
+class WhatsAppIntegrationAdmin(admin.ModelAdmin):
+    list_display = (
+        'company',
+        'phone_number_id',
+        'whatsapp_business_account_id',
+        'is_active',
+        'last_communication_at',
+        'created_at',
+        'updated_at',
+    )
+    list_filter = ('is_active', 'last_communication_at', 'created_at')
+    search_fields = ('company__nome', 'phone_number_id', 'whatsapp_business_account_id')
+    autocomplete_fields = ('company',)
+    readonly_fields = ('last_communication_at', 'created_at', 'updated_at')
+
+
+@admin.register(Contato)
+class ContatoAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'whatsapp_id', 'empresa', 'criado_em', 'atualizado_em')
+    search_fields = ('nome', 'whatsapp_id', 'empresa__nome')
+    list_filter = ('empresa', 'criado_em')
     autocomplete_fields = ('empresa',)
+
+
+@admin.register(Mensagem)
+class MensagemAdmin(admin.ModelAdmin):
+    list_display = (
+        'external_message_id',
+        'contato',
+        'empresa',
+        'atendimento',
+        'direcao',
+        'tipo',
+        'status',
+        'timestamp_meta',
+        'criado_em',
+    )
+    search_fields = (
+        'external_message_id',
+        'contato__nome',
+        'contato__whatsapp_id',
+        'empresa__nome',
+    )
+    list_filter = ('direcao', 'tipo', 'status', 'empresa', 'criado_em')
+    autocomplete_fields = ('empresa', 'atendimento', 'contato')
+    readonly_fields = (
+        'empresa',
+        'atendimento',
+        'contato',
+        'external_message_id',
+        'direcao',
+        'tipo',
+        'texto',
+        'status',
+        'erro_codigo',
+        'timestamp_meta',
+        'criado_em',
+    )

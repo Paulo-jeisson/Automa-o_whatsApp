@@ -9,23 +9,23 @@
       <span class="brand-mark">Z</span>
       <div>
         <strong>ZapFluxo</strong>
-        <small>Atendimento via WhatsApp para negocios locais</small>
+        <small>Atendimento via WhatsApp para negócios locais</small>
       </div>
     </div>
 
     <div class="login-heading">
       <span class="eyebrow">Acesso do dono</span>
       <h1>Entre no painel</h1>
-      <p>Organize seus atendimentos em uma area simples e segura.</p>
+      <p>Organize seus atendimentos em uma área simples e segura.</p>
     </div>
 
     {% if form.errors %}
-      <div class="alert">Usuario ou senha invalidos.</div>
+      <div class="alert">Usuário ou senha inválidos.</div>
     {% endif %}
 
     <form method="post" class="form-stack">
       {% csrf_token %}
-      <label for="{{ form.username.id_for_label }}">Usuario</label>
+      <label for="{{ form.username.id_for_label }}">Usuário</label>
       {{ form.username }}
 
       <label for="{{ form.password.id_for_label }}">Senha</label>
@@ -33,6 +33,7 @@
 
       <button class="btn btn-primary" type="submit">Entrar</button>
     </form>
+    <a class="login-back" href="{% url 'landing_page' %}">← Voltar para o site</a>
   </section>
 </main>
 {% endblock %}
