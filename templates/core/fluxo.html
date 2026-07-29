@@ -64,7 +64,7 @@
           <p>{{ fluxo.pergunta_menu }}</p>
           <ul>
             {% for opcao in fluxo.opcoes %}
-              <li>{{ opcao }}</li>
+              <li>{% if opcao.label %}{{ opcao.label }}{% else %}{{ opcao }}{% endif %}</li>
             {% endfor %}
           </ul>
         </article>

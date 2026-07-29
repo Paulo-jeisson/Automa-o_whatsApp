@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Conectar WhatsApp | ZapFluxo{% endblock %}
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">Z</span><div><strong>ZapFluxo</strong><small>Atendimento simples</small></div></div>
+    <nav class="nav-list">
+      <a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a>
+      <a class="nav-item" href="{% url 'atendimentos' %}">Atendimentos</a>
+      <a class="nav-item" href="{% url 'agenda' %}">Agenda</a>
+      <a class="nav-item active" href="{% url 'configuracoes' %}">Configurações</a>
+    </nav>
+  </aside>
+  <main class="main-area">
+    <header class="topbar">
+      <div><span class="eyebrow">Integração oficial</span><h1>Conectar WhatsApp</h1></div>
+      <a class="btn btn-outline" href="{% url 'configuracoes' %}">Voltar</a>
+    </header>
+    <section class="panel onboarding-panel">
+      <div class="panel-header"><div><span class="eyebrow">Meta Embedded Signup</span><h2>Autorize o número da sua empresa</h2><p class="panel-description">Você será direcionado à janela oficial da Meta para escolher sua conta e seu número do WhatsApp Business.</p></div></div>
+      {% if messages %}<div class="messages">{% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+      <div class="onboarding-steps">
+        <div><strong>1</strong><span>Entre com sua conta Meta</span></div>
+        <div><strong>2</strong><span>Escolha a empresa e o WhatsApp</span></div>
+        <div><strong>3</strong><span>Autorize e volte ao ZapFluxo</span></div>
+      </div>
+      {% if embedded_signup_ready %}
+        <button id="connect-whatsapp" class="btn btn-primary onboarding-button" type="button">Conectar com a Meta</button>
+        <p id="onboarding-status" class="panel-description" role="status"></p>
+        <form id="embedded-signup-form" method="post" hidden>
+          {% csrf_token %}
+          <input type="hidden" name="nonce" value="{{ nonce }}">
+          <input type="hidden" name="code" id="signup-code">
+          <input type="hidden" name="waba_id" id="signup-waba">
+          <input type="hidden" name="phone_number_id" id="signup-phone">
+        </form>
+      {% else %}
+        <div class="alert">O Embedded Signup ainda não foi configurado pelo administrador do ZapFluxo.</div>
+      {% endif %}
+      <p class="onboarding-privacy">O ZapFluxo não recebe sua senha da Meta. A autorização acontece na janela oficial e a credencial retornada é protegida no servidor.</p>
+    </section>
+  </main>
+</div>
+{% if embedded_signup_ready %}
+<script>
+  window.fbAsyncInit = function() {
+    FB.init({appId: "{{ meta_app_id|escapejs }}", cookie: true, xfbml: false, version: "{{ meta_api_version|escapejs }}"});
+  };
+  (function(d, s, id) {
+    if (d.getElementById(id)) return;
+    const js = d.createElement(s);
+    js.id = id;
+    js.src = "https://connect.facebook.net/pt_BR/sdk.js";
+    d.getElementsByTagName(s)[0].parentNode.insertBefore(js, d.getElementsByTagName(s)[0]);
+  }(document, "script", "facebook-jssdk"));
+  let signupCode = "";
+  let signupData = null;
+  const statusNode = document.getElementById("onboarding-status");
+  const trySubmit = () => {
+    if (!signupCode || !signupData || !signupData.waba_id || !signupData.phone_number_id) return;
+    document.getElementById("signup-code").value = signupCode;
+    document.getElementById("signup-waba").value = signupData.waba_id;
+    document.getElementById("signup-phone").value = signupData.phone_number_id;
+    statusNode.textContent = "Validando sua conta com a Meta...";
+    document.getElementById("embedded-signup-form").submit();
+  };
+  window.addEventListener("message", (event) => {
+    if (!["https://www.facebook.com", "https://web.facebook.com"].includes(event.origin)) return;
+    let data = event.data;
+    try { if (typeof data === "string") data = JSON.parse(data); } catch (_) { return; }
+    if (data && data.type === "WA_EMBEDDED_SIGNUP" && data.event === "FINISH") {
+      signupData = data.data || {};
+      trySubmit();
+    } else if (data && data.type === "WA_EMBEDDED_SIGNUP" && data.event === "ERROR") {
+      statusNode.textContent = "A Meta não concluiu a configuração. Tente novamente.";
+    }
+  });
+  document.getElementById("connect-whatsapp").addEventListener("click", () => {
+    if (typeof FB === "undefined") {
+      statusNode.textContent = "A conexão com a Meta ainda está carregando. Tente novamente em alguns segundos.";
+      return;
+    }
+    statusNode.textContent = "Abrindo a autorização oficial da Meta...";
+    FB.login((response) => {
+      if (!response.authResponse || !response.authResponse.code) {
+        statusNode.textContent = "A autorização foi cancelada ou não foi concluída.";
+        return;
+      }
+      signupCode = response.authResponse.code;
+      trySubmit();
+    }, {
+      config_id: "{{ meta_config_id|escapejs }}",
+      response_type: "code",
+      override_default_response_type: true,
+      extras: {setup: {}, sessionInfoVersion: "3"}
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

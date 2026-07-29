@@ -2,7 +2,10 @@ import re
 
 from django import forms
 
-from .models import Atendimento, EmpresaCliente, FluxoAtendimento
+from .models import (
+    Agendamento, Atendimento, BloqueioAgenda, Contato, DisponibilidadeSemanal,
+    EmpresaCliente, FluxoAtendimento, Servico,
+)
 
 
 class EmpresaClienteForm(forms.ModelForm):
@@ -82,11 +85,27 @@ class FluxoAtendimentoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
-            self.fields['opcoes_texto'].initial = '\n'.join(self.instance.opcoes)
+            self.fields['opcoes_texto'].initial = '\n'.join(
+                f'{item.get("label", "")} | {item.get("action", "")}' if isinstance(item, dict) else str(item)
+                for item in self.instance.opcoes
+            )
 
     def clean_opcoes_texto(self):
         value = self.cleaned_data.get('opcoes_texto', '')
-        opcoes = [line.strip() for line in value.splitlines() if line.strip()]
+        lines = [line.strip() for line in value.splitlines() if line.strip()]
+        valid_actions = {'AGENDAR', 'CONSULTAR_AGENDAMENTO', 'FALAR_COM_ATENDENTE'}
+        opcoes = []
+        for line in lines:
+            if '|' not in line:
+                opcoes.append(line)
+                continue
+            label, action = (part.strip() for part in line.split('|', 1))
+            action = action.upper()
+            if not label or action not in valid_actions:
+                raise forms.ValidationError(
+                    'Após | use AGENDAR, CONSULTAR_AGENDAMENTO ou FALAR_COM_ATENDENTE.'
+                )
+            opcoes.append({'label': label, 'action': action})
 
         if len(opcoes) < 2:
             raise forms.ValidationError('Informe pelo menos duas opções para o menu.')
@@ -138,9 +157,10 @@ class AtendimentoSimuladoForm(forms.ModelForm):
     def __init__(self, *args, fluxo=None, **kwargs):
         super().__init__(*args, **kwargs)
         opcoes = fluxo.opcoes if fluxo else []
+        labels = [item.get('label', '') if isinstance(item, dict) else item for item in opcoes]
         self.fields['opcao_escolhida'] = forms.ChoiceField(
             label='O que voce deseja?',
-            choices=[(opcao, opcao) for opcao in opcoes],
+            choices=[(opcao, opcao) for opcao in labels],
         )
 
     def clean_telefone_cliente(self):
@@ -201,3 +221,83 @@ class ConfiguracoesContaForm(forms.Form):
             self.user.set_password(self.cleaned_data['new_password'])
         self.user.save()
         return self.user, password_changed
+
+
+class ServicoForm(forms.ModelForm):
+    class Meta:
+        model = Servico
+        fields = ['nome', 'descricao', 'duracao_minutos', 'ativo']
+        widgets = {'descricao': forms.Textarea(attrs={'rows': 3})}
+
+    def __init__(self, *args, empresa=None, **kwargs):
+        self.empresa = empresa
+        super().__init__(*args, **kwargs)
+
+    def clean_nome(self):
+        nome = self.cleaned_data['nome'].strip()
+        if self.empresa is not None:
+            duplicates = Servico.objects.filter(
+                empresa=self.empresa,
+                nome__iexact=nome,
+            )
+            if self.instance.pk:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                raise forms.ValidationError('Já existe um serviço com esse nome.')
+        return nome
+
+
+class DisponibilidadeSemanalForm(forms.ModelForm):
+    class Meta:
+        model = DisponibilidadeSemanal
+        fields = ['dia_semana', 'hora_inicio', 'hora_fim', 'intervalo_minutos', 'ativo']
+        widgets = {'hora_inicio': forms.TimeInput(attrs={'type': 'time'}), 'hora_fim': forms.TimeInput(attrs={'type': 'time'})}
+
+
+class BloqueioAgendaForm(forms.ModelForm):
+    class Meta:
+        model = BloqueioAgenda
+        fields = ['data', 'hora_inicio', 'hora_fim', 'motivo']
+        widgets = {
+            'data': forms.DateInput(attrs={'type': 'date'}),
+            'hora_inicio': forms.TimeInput(attrs={'type': 'time'}),
+            'hora_fim': forms.TimeInput(attrs={'type': 'time'}),
+        }
+
+
+class AgendamentoForm(forms.ModelForm):
+    nome_contato = forms.CharField(label='Cliente', max_length=120)
+    telefone = forms.CharField(label='WhatsApp', max_length=32)
+
+    class Meta:
+        model = Agendamento
+        fields = ['servico', 'data', 'hora_inicio', 'status', 'observacao']
+        widgets = {
+            'data': forms.DateInput(attrs={'type': 'date'}),
+            'hora_inicio': forms.TimeInput(attrs={'type': 'time'}),
+            'observacao': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, empresa=None, **kwargs):
+        self.empresa = empresa
+        super().__init__(*args, **kwargs)
+        self.fields['servico'].queryset = Servico.objects.filter(empresa=empresa, ativo=True)
+        if self.instance.pk:
+            self.fields['nome_contato'].initial = self.instance.contato.nome
+            self.fields['telefone'].initial = self.instance.contato.whatsapp_id
+
+    def clean_telefone(self):
+        digits = re.sub(r'\D', '', self.cleaned_data['telefone'])
+        if len(digits) < 10 or len(digits) > 32:
+            raise forms.ValidationError('Informe um telefone válido com DDD.')
+        return digits
+
+    def save_contact(self):
+        contato, _ = Contato.objects.get_or_create(
+            empresa=self.empresa, whatsapp_id=self.cleaned_data['telefone'],
+            defaults={'nome': self.cleaned_data['nome_contato']},
+        )
+        if self.cleaned_data['nome_contato'] and contato.nome != self.cleaned_data['nome_contato']:
+            contato.nome = self.cleaned_data['nome_contato']
+            contato.save(update_fields=['nome', 'atualizado_em'])
+        return contato

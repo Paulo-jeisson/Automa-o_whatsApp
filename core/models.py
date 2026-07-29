@@ -71,6 +71,13 @@ class EmpresaCliente(models.Model):
 
 
 class WhatsAppIntegration(models.Model):
+    class OnboardingStatus(models.TextChoices):
+        LEGACY = 'LEGACY', 'Configuração manual'
+        CONNECTED = 'CONNECTED', 'Conectado'
+        ERROR = 'ERROR', 'Erro de conexão'
+        EXPIRED = 'EXPIRED', 'Token expirado'
+        DISCONNECTED = 'DISCONNECTED', 'Desconectado'
+
     company = models.OneToOneField(
         EmpresaCliente,
         on_delete=models.CASCADE,
@@ -87,6 +94,19 @@ class WhatsAppIntegration(models.Model):
         'WhatsApp Business Account ID',
         max_length=64,
     )
+    access_token_encrypted = models.TextField('token criptografado', blank=True, editable=False)
+    onboarding_status = models.CharField(
+        'status do onboarding',
+        max_length=20,
+        choices=OnboardingStatus.choices,
+        default=OnboardingStatus.LEGACY,
+    )
+    display_phone_number = models.CharField('número exibido', max_length=32, blank=True)
+    verified_name = models.CharField('nome verificado', max_length=120, blank=True)
+    token_expires_at = models.DateTimeField('token expira em', null=True, blank=True)
+    connected_at = models.DateTimeField('conectada em', null=True, blank=True)
+    disconnected_at = models.DateTimeField('desconectada em', null=True, blank=True)
+    last_error_code = models.CharField('último código de erro', max_length=32, blank=True)
     is_active = models.BooleanField('ativa', default=True)
     last_communication_at = models.DateTimeField(
         'última comunicação',
@@ -113,6 +133,24 @@ class WhatsAppIntegration(models.Model):
 
     def __str__(self):
         return f'WhatsApp - {self.company.nome}'
+
+    @property
+    def is_connected(self):
+        return (
+            self.is_active
+            and self.onboarding_status in {
+                self.OnboardingStatus.CONNECTED,
+                self.OnboardingStatus.LEGACY,
+            }
+        )
+
+    def set_access_token(self, token):
+        from .services.whatsapp.tokens import encrypt_token
+        self.access_token_encrypted = encrypt_token(token)
+
+    def get_access_token(self):
+        from .services.whatsapp.tokens import decrypt_token
+        return decrypt_token(self.access_token_encrypted) if self.access_token_encrypted else ''
 
 
 class Contato(models.Model):
@@ -280,6 +318,16 @@ def dados_padrao_fluxo(empresa):
 
 
 class Atendimento(models.Model):
+    class Step(models.TextChoices):
+        MENU = 'MENU', 'Menu'
+        SERVICE = 'SERVICE', 'Escolha do serviço'
+        DATE = 'DATE', 'Escolha da data'
+        TIME = 'TIME', 'Escolha do horário'
+        CONFIRMATION = 'CONFIRMATION', 'Confirmação'
+        WAITING_HUMAN = 'WAITING_HUMAN', 'Aguardando atendente'
+        HUMAN = 'HUMAN', 'Em atendimento humano'
+        FINISHED = 'FINISHED', 'Finalizado'
+
     STATUS_NOVO = 'novo'
     STATUS_EM_ANDAMENTO = 'em_andamento'
     STATUS_FINALIZADO = 'finalizado'
@@ -310,6 +358,8 @@ class Atendimento(models.Model):
     observacao = models.TextField('observacao', blank=True)
     status = models.CharField('status', max_length=30, choices=STATUS_CHOICES, default=STATUS_NOVO)
     automation_enabled = models.BooleanField('automação ativa', default=True)
+    current_step = models.CharField('etapa atual', max_length=24, choices=Step.choices, default=Step.MENU)
+    flow_context = models.JSONField('contexto da conversa', default=dict, blank=True)
     criado_em = models.DateTimeField('criado em', auto_now_add=True)
     avisado_em = models.DateTimeField('avisado em', null=True, blank=True)
 
@@ -391,3 +441,118 @@ class Mensagem(models.Model):
 
     def __str__(self):
         return f'{self.get_direcao_display()} - {self.external_message_id}'
+
+
+class Servico(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='servicos')
+    nome = models.CharField(max_length=120)
+    descricao = models.TextField(blank=True)
+    duracao_minutos = models.PositiveIntegerField(default=60)
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['nome']
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'nome'], name='unique_service_name_per_company'),
+            models.CheckConstraint(condition=models.Q(duracao_minutos__gt=0), name='service_duration_positive'),
+        ]
+
+    def __str__(self):
+        return self.nome
+
+
+class DisponibilidadeSemanal(models.Model):
+    class DiaSemana(models.IntegerChoices):
+        SEGUNDA = 0, 'Segunda-feira'
+        TERCA = 1, 'Terça-feira'
+        QUARTA = 2, 'Quarta-feira'
+        QUINTA = 3, 'Quinta-feira'
+        SEXTA = 4, 'Sexta-feira'
+        SABADO = 5, 'Sábado'
+        DOMINGO = 6, 'Domingo'
+
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='disponibilidades')
+    dia_semana = models.PositiveSmallIntegerField(choices=DiaSemana.choices)
+    hora_inicio = models.TimeField()
+    hora_fim = models.TimeField()
+    intervalo_minutos = models.PositiveIntegerField(default=30)
+    ativo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['dia_semana', 'hora_inicio']
+        constraints = [
+            models.CheckConstraint(condition=models.Q(hora_fim__gt=models.F('hora_inicio')), name='availability_end_after_start'),
+            models.CheckConstraint(condition=models.Q(intervalo_minutos__gt=0), name='availability_interval_positive'),
+            models.UniqueConstraint(fields=['empresa', 'dia_semana', 'hora_inicio', 'hora_fim'], name='unique_availability_window'),
+        ]
+
+    def __str__(self):
+        return f'{self.get_dia_semana_display()} {self.hora_inicio:%H:%M}-{self.hora_fim:%H:%M}'
+
+
+class BloqueioAgenda(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='bloqueios_agenda')
+    data = models.DateField()
+    hora_inicio = models.TimeField(null=True, blank=True)
+    hora_fim = models.TimeField(null=True, blank=True)
+    motivo = models.CharField(max_length=180, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['data', 'hora_inicio']
+        constraints = [
+            models.CheckConstraint(
+                condition=(models.Q(hora_inicio__isnull=True, hora_fim__isnull=True) | models.Q(hora_inicio__isnull=False, hora_fim__isnull=False, hora_fim__gt=models.F('hora_inicio'))),
+                name='block_times_both_null_or_valid',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.data:%d/%m/%Y} - {self.motivo or "Bloqueado"}'
+
+
+class Agendamento(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pendente'
+        CONFIRMED = 'CONFIRMED', 'Confirmado'
+        CANCELLED = 'CANCELLED', 'Cancelado'
+        COMPLETED = 'COMPLETED', 'Concluído'
+
+    class Origem(models.TextChoices):
+        WHATSAPP = 'WHATSAPP', 'WhatsApp'
+        MANUAL = 'MANUAL', 'Manual'
+
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='agendamentos')
+    contato = models.ForeignKey(Contato, on_delete=models.PROTECT, related_name='agendamentos')
+    atendimento = models.ForeignKey(Atendimento, on_delete=models.SET_NULL, related_name='agendamentos', null=True, blank=True)
+    servico = models.ForeignKey(Servico, on_delete=models.PROTECT, related_name='agendamentos')
+    data = models.DateField()
+    hora_inicio = models.TimeField()
+    hora_fim = models.TimeField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    origem = models.CharField(max_length=16, choices=Origem.choices, default=Origem.MANUAL)
+    observacao = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['data', 'hora_inicio']
+        indexes = [models.Index(fields=['empresa', 'data', 'status'])]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(hora_fim__gt=models.F('hora_inicio')), name='appointment_end_after_start'),
+            models.UniqueConstraint(fields=['empresa', 'data', 'hora_inicio'], condition=models.Q(status__in=['PENDING', 'CONFIRMED']), name='unique_active_appointment_start'),
+        ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.contato_id and self.empresa_id and self.contato.empresa_id != self.empresa_id:
+            raise ValidationError({'contato': 'O contato deve pertencer à mesma empresa.'})
+        if self.servico_id and self.empresa_id and self.servico.empresa_id != self.empresa_id:
+            raise ValidationError({'servico': 'O serviço deve pertencer à mesma empresa.'})
+        if self.atendimento_id and self.empresa_id and self.atendimento.empresa_id != self.empresa_id:
+            raise ValidationError({'atendimento': 'O atendimento deve pertencer à mesma empresa.'})
+
+    def __str__(self):
+        return f'{self.servico} - {self.data:%d/%m/%Y} {self.hora_inicio:%H:%M}'

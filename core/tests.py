@@ -35,6 +35,12 @@ class LandingPageTests(TestCase):
 
         self.assertContains(response, reverse('login'))
 
+    def test_legal_pages_are_public_and_interlinked(self):
+        for name in ('politica_privacidade', 'termos_servico', 'exclusao_dados'):
+            response = self.client.get(reverse(name))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'paulojeissoncostac@gmail.com')
+
 
 class MvpFinalizationTests(TestCase):
     def test_seed_demo_is_idempotent(self):

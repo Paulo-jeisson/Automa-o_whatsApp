@@ -489,4 +489,4 @@ class WhatsAppIntegrationPanelTests(TestCase):
 
         response = self.client.post(reverse('testar_integracao_whatsapp'))
 
-        self.assertEqual(response.status_code, 404)
+        self.assertRedirects(response, reverse('configuracoes'))

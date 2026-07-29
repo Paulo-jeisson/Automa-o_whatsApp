@@ -9,7 +9,7 @@ Requisitos: Python 3.12 ou superior e Django 6.
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
-python -m pip install "Django>=6.0,<6.1"
+python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 python manage.py migrate
 python manage.py runserver
@@ -35,11 +35,40 @@ O projeto carrega o arquivo `.env` local sem substituir variáveis já definidas
 | `PUBLIC_BASE_URL` | URL HTTPS pública, sem barra final |
 | `META_VERIFY_TOKEN` | Token escolhido para verificação do webhook |
 | `META_APP_SECRET` | App Secret usado na assinatura `X-Hub-Signature-256` |
+| `META_APP_ID` | ID do aplicativo que executa o Embedded Signup |
+| `META_EMBEDDED_SIGNUP_CONFIG_ID` | ID da configuração de login incorporado criada na Meta |
 | `META_GRAPH_API_VERSION` | Versão da Graph API habilitada para o aplicativo |
-| `META_ACCESS_TOKEN` | Token temporário de desenvolvimento para testar a configuração |
+| `META_ACCESS_TOKEN` | Token legado opcional, somente para integrações manuais antigas |
+| `WHATSAPP_TOKEN_ENCRYPTION_KEY` | Chave Fernet exclusiva para criptografar tokens por empresa |
 | `SQLITE_NAME` | Caminho opcional do SQLite |
 
-`META_ACCESS_TOKEN` não é persistido nem exibido. Essa variável atende apenas a conta de teste desta fase; credenciais multiempresa de produção exigirão cofre de segredos ou armazenamento criptografado.
+Os tokens obtidos pelo Embedded Signup são criptografados por empresa e nunca são
+renderizados no navegador ou no admin.
+
+## Onboarding oficial multiempresa
+
+No painel da Meta, crie uma configuração do **WhatsApp Embedded Signup** para o
+aplicativo, habilite `whatsapp_business_management` e
+`whatsapp_business_messaging`, e cadastre o domínio HTTPS definitivo do ZapFluxo.
+Preencha `META_APP_ID`, `META_APP_SECRET` e
+`META_EMBEDDED_SIGNUP_CONFIG_ID` no ambiente do servidor.
+
+Gere a chave de criptografia uma única vez e guarde-a no gerenciador de segredos
+da hospedagem:
+
+```powershell
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Depois de executar `python manage.py migrate`, cada cliente acessa
+**Configurações → Conectar WhatsApp**. A autorização abre na janela oficial da
+Meta, valida se o número pertence à WABA escolhida e assina os webhooks. O
+Phone Number ID e o token criptografado ficam ligados apenas à empresa do usuário
+autenticado. O token global não é usado por conexões novas.
+
+Para comercialização, use domínio próprio estável e HTTPS, `DEBUG=False`, banco
+gerenciado, backups, chave de criptografia fora do código e processo de revisão e
+verificação exigido pela Meta. O ngrok é adequado somente para desenvolvimento.
 
 ## Configuração WhatsApp Cloud API — Desenvolvimento
 

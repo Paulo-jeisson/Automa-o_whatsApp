@@ -17,7 +17,21 @@ class InvalidWebhookPayload(WhatsAppError):
 class WhatsAppAPIError(WhatsAppError):
     """Falha sanitizada ao comunicar com a Graph API."""
 
-    def __init__(self, message, *, status_code=None, error_code=''):
+    def __init__(
+        self,
+        message,
+        *,
+        status_code=None,
+        error_code='',
+        error_subcode='',
+        error_type='',
+        fbtrace_id='',
+        meta_message='',
+    ):
         super().__init__(message)
         self.status_code = status_code
         self.error_code = str(error_code or '')[:32]
+        self.error_subcode = str(error_subcode or '')[:32]
+        self.error_type = str(error_type or '')[:80]
+        self.fbtrace_id = str(fbtrace_id or '')[:128]
+        self.meta_message = str(meta_message or '')[:500]

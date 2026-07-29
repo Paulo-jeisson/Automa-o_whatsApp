@@ -85,7 +85,7 @@
         <article class="settings-info-card">
           <span class="eyebrow">WhatsApp</span>
           {% if whatsapp_integration %}
-            <strong>{% if whatsapp_integration.is_active %}Configurado{% else %}Inativo{% endif %}</strong>
+            <strong>{{ whatsapp_integration.get_onboarding_status_display }}</strong>
             <small>Phone Number ID: {{ whatsapp_integration.phone_number_id }}</small>
             <small>WABA ID: {{ whatsapp_integration.whatsapp_business_account_id }}</small>
             <small>
@@ -102,9 +102,21 @@
                 <button class="btn btn-outline settings-test-button" type="submit">Testar integração</button>
               </form>
             {% endif %}
+            <a class="btn btn-primary settings-test-button" href="{% url 'whatsapp_onboarding' %}">
+              {% if whatsapp_integration.is_connected %}Reconectar WhatsApp{% else %}Conectar WhatsApp{% endif %}
+            </a>
+            {% if whatsapp_integration.is_connected %}
+              <form method="post" action="{% url 'whatsapp_desconectar' %}">
+                {% csrf_token %}
+                <button class="btn btn-outline settings-test-button" type="submit">Desconectar</button>
+              </form>
+            {% endif %}
           {% else %}
             <strong>Não configurado</strong>
-            <small>Cadastre a integração oficial pelo Django Admin.</small>
+            <small>Autorize o número comercial com segurança pela Meta.</small>
+            <a class="btn btn-primary settings-test-button" href="{% url 'whatsapp_onboarding' %}">
+              Conectar WhatsApp
+            </a>
           {% endif %}
         </article>
       </aside>

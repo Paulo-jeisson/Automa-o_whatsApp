@@ -1,12 +1,17 @@
 import json
+import logging
 import re
 from dataclasses import dataclass
+from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from django.conf import settings
 
 from .exceptions import WhatsAppAPIError, WhatsAppProviderError
+
+
+logger = logging.getLogger('whatsapp.api')
 
 
 @dataclass(frozen=True)
@@ -24,8 +29,12 @@ class WhatsAppCloudClient:
         api_version=None,
         timeout=10,
     ):
-        self.phone_number_id = str(phone_number_id)
-        self.access_token = access_token or settings.META_ACCESS_TOKEN
+        self.phone_number_id = str(phone_number_id).strip()
+        self.access_token = (
+            settings.META_ACCESS_TOKEN.strip()
+            if access_token is None
+            else str(access_token).strip()
+        )
         self.api_version = api_version or settings.META_GRAPH_API_VERSION
         self.timeout = timeout
 
@@ -82,7 +91,7 @@ class WhatsAppCloudClient:
         data = self._request_json(
             method='GET',
             path=target_phone_number_id,
-            query='fields=id,display_phone_number,verified_name',
+            query={'fields': 'id,display_phone_number,verified_name'},
         )
         if str(data.get('id', '')) != target_phone_number_id:
             raise WhatsAppProviderError('A Meta retornou uma configuração inesperada.')
@@ -90,17 +99,17 @@ class WhatsAppCloudClient:
 
     def _validate_configuration(self, require_phone_number_id=False, phone_number_id=None):
         if not self.access_token:
-            raise WhatsAppProviderError('Access Token de desenvolvimento não configurado.')
+            raise WhatsAppProviderError('A credencial do WhatsApp não está configurada.')
         if not re.fullmatch(r'v\d+\.\d+', self.api_version):
             raise WhatsAppProviderError('Versão da Graph API inválida.')
         target = self.phone_number_id if phone_number_id is None else phone_number_id
         if (require_phone_number_id or phone_number_id is not None) and not str(target).isdigit():
             raise WhatsAppProviderError('Phone Number ID inválido.')
 
-    def _request_json(self, *, method, path, payload=None, query=''):
+    def _request_json(self, *, method, path, payload=None, query=None):
         url = f'https://graph.facebook.com/{self.api_version}/{path}'
         if query:
-            url = f'{url}?{query}'
+            url = f'{url}?{urlencode(query)}'
         body = json.dumps(payload).encode('utf-8') if payload is not None else None
         headers = {'Authorization': f'Bearer {self.access_token}'}
         if body is not None:
@@ -111,11 +120,19 @@ class WhatsAppCloudClient:
             with urlopen(request, timeout=self.timeout) as response:
                 return json.loads(response.read())
         except HTTPError as error:
-            error_code = _extract_error_code(error)
+            details = _parse_meta_error(error, access_token=self.access_token)
+            logger.warning(
+                'whatsapp.api.rejected status=%s type=%s code=%s subcode=%s fbtrace_id=%s',
+                error.code,
+                details['error_type'],
+                details['error_code'],
+                details['error_subcode'],
+                details['fbtrace_id'],
+            )
             raise WhatsAppAPIError(
                 'A Meta rejeitou a requisição.',
                 status_code=error.code,
-                error_code=error_code,
+                **details,
             ) from error
         except (URLError, TimeoutError) as error:
             raise WhatsAppAPIError('A Meta não respondeu dentro do esperado.') from error
@@ -123,10 +140,34 @@ class WhatsAppCloudClient:
             raise WhatsAppAPIError('A Meta retornou uma resposta inválida.') from error
 
 
-def _extract_error_code(error):
+def _parse_meta_error(error, *, access_token=''):
+    empty = {
+        'error_code': '',
+        'error_subcode': '',
+        'error_type': '',
+        'fbtrace_id': '',
+        'meta_message': '',
+    }
     try:
-        data = json.loads(error.read())
+        raw = error.read()
+        data = json.loads(raw)
         error_data = data.get('error', {})
-        return error_data.get('code', '') if isinstance(error_data, dict) else ''
-    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
-        return ''
+        if not isinstance(error_data, dict):
+            return empty
+        message = str(error_data.get('message', ''))
+        if access_token:
+            message = message.replace(str(access_token), '[REDACTED]')
+        message = re.sub(
+            r'(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+',
+            'Bearer [REDACTED]',
+            message,
+        )
+        return {
+            'error_code': error_data.get('code', ''),
+            'error_subcode': error_data.get('error_subcode', ''),
+            'error_type': error_data.get('type', ''),
+            'fbtrace_id': error_data.get('fbtrace_id', ''),
+            'meta_message': message,
+        }
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        return empty

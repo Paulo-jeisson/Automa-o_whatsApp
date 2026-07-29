@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Política de Privacidade | ZapFluxo{% endblock %}
+{% block body %}
+<main class="legal-page">
+  <article class="legal-card">
+    <a class="legal-brand" href="{% url 'landing_page' %}"><span class="brand-mark">Z</span><strong>ZapFluxo</strong></a>
+    <span class="eyebrow">Última atualização: 27 de julho de 2026</span>
+    <h1>Política de Privacidade</h1>
+    <p>Esta política explica como o ZapFluxo trata dados pessoais ao oferecer atendimento e agendamento integrado ao WhatsApp.</p>
+
+    <h2>1. Dados tratados</h2>
+    <p>Podemos tratar nome, telefone, identificador do WhatsApp, conteúdo e registros técnicos das mensagens, dados de atendimento, serviço, data e horário de agendamentos, além dos dados de cadastro dos responsáveis pelas empresas usuárias.</p>
+
+    <h2>2. Finalidades</h2>
+    <p>Os dados são utilizados para identificar contatos, entregar mensagens, automatizar fluxos configurados pela empresa, criar e administrar agendamentos, encaminhar atendimentos humanos, manter histórico, proteger a plataforma e cumprir obrigações legais.</p>
+
+    <h2>3. Bases legais</h2>
+    <p>O tratamento ocorre conforme a finalidade e a relação aplicável, podendo se apoiar na execução de contrato ou procedimentos preliminares, cumprimento de obrigação legal, legítimo interesse e consentimento, quando necessário.</p>
+
+    <h2>4. Compartilhamento</h2>
+    <p>Os dados podem ser tratados pela empresa com quem o titular conversa e por fornecedores necessários à operação, especialmente a infraestrutura da Meta/WhatsApp e provedores técnicos. Não comercializamos dados pessoais.</p>
+
+    <h2>5. Armazenamento e segurança</h2>
+    <p>Mantemos os dados pelo período necessário às finalidades informadas, à prestação do serviço e ao cumprimento de obrigações legais. Adotamos medidas técnicas e administrativas razoáveis para prevenir acessos não autorizados, perda e uso indevido.</p>
+
+    <h2>6. Direitos do titular</h2>
+    <p>O titular pode solicitar confirmação de tratamento, acesso, correção, portabilidade quando aplicável, informação sobre compartilhamento, revogação do consentimento, anonimização, bloqueio ou eliminação nos casos previstos na LGPD.</p>
+
+    <h2>7. Exclusão de dados</h2>
+    <p>As instruções para solicitar exclusão estão disponíveis na página <a href="{% url 'exclusao_dados' %}">Exclusão de dados</a>. Algumas informações poderão ser conservadas quando houver obrigação ou autorização legal.</p>
+
+    <h2>8. Atualizações</h2>
+    <p>Esta política pode ser atualizada para refletir mudanças operacionais ou legais. A versão vigente ficará sempre disponível neste endereço.</p>
+
+    <h2>9. Contato</h2>
+    <p>Para dúvidas ou exercício de direitos, escreva para <a href="mailto:paulojeissoncostac@gmail.com">paulojeissoncostac@gmail.com</a>.</p>
+
+    <nav class="legal-links"><a href="{% url 'termos_servico' %}">Termos de Serviço</a><a href="{% url 'exclusao_dados' %}">Exclusão de dados</a></nav>
+  </article>
+</main>
+{% endblock %}

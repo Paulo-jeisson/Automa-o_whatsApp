@@ -31,7 +31,7 @@
         <strong>{{ fluxo.pergunta_menu }}</strong>
         <div class="option-list">
           {% for opcao in fluxo.opcoes %}
-            <span>{{ opcao }}</span>
+              <span>{% if opcao.label %}{{ opcao.label }}{% else %}{{ opcao }}{% endif %}</span>
           {% endfor %}
         </div>
       </article>

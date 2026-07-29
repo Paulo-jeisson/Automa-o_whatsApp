@@ -1,12 +1,21 @@
 from django.contrib import admin
 from .models import (
+    Agendamento,
     Atendimento,
+    BloqueioAgenda,
     Contato,
+    DisponibilidadeSemanal,
     EmpresaCliente,
     FluxoAtendimento,
     Mensagem,
+    Servico,
     WhatsAppIntegration,
 )
+
+admin.site.register(Servico)
+admin.site.register(DisponibilidadeSemanal)
+admin.site.register(BloqueioAgenda)
+admin.site.register(Agendamento)
 
 
 @admin.register(EmpresaCliente)
@@ -38,15 +47,22 @@ class WhatsAppIntegrationAdmin(admin.ModelAdmin):
         'company',
         'phone_number_id',
         'whatsapp_business_account_id',
+        'onboarding_status',
         'is_active',
         'last_communication_at',
         'created_at',
         'updated_at',
     )
-    list_filter = ('is_active', 'last_communication_at', 'created_at')
-    search_fields = ('company__nome', 'phone_number_id', 'whatsapp_business_account_id')
+    list_filter = ('onboarding_status', 'is_active', 'last_communication_at', 'created_at')
+    search_fields = (
+        'company__nome', 'phone_number_id', 'whatsapp_business_account_id',
+        'display_phone_number', 'verified_name',
+    )
     autocomplete_fields = ('company',)
-    readonly_fields = ('last_communication_at', 'created_at', 'updated_at')
+    readonly_fields = (
+        'connected_at', 'disconnected_at', 'last_communication_at',
+        'created_at', 'updated_at',
+    )
 
 
 @admin.register(Contato)

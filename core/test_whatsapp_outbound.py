@@ -85,6 +85,74 @@ class WhatsAppCloudClientTests(TestCase):
         self.assertNotIn('sensitive', str(context.exception))
 
     @patch('core.services.whatsapp.client.urlopen')
+    def test_meta_error_parses_safe_structured_details(self, urlopen_mock):
+        secret = 'token-super-secreto'
+        urlopen_mock.side_effect = HTTPError(
+            url='https://graph.facebook.com/v25.0/123456789',
+            code=401,
+            msg='Unauthorized',
+            hdrs=None,
+            fp=io.BytesIO(json.dumps({
+                'error': {
+                    'message': f'Expired Bearer {secret}',
+                    'type': 'OAuthException',
+                    'code': 190,
+                    'error_subcode': 463,
+                    'fbtrace_id': 'safe-trace-id',
+                },
+            }).encode()),
+        )
+        client = WhatsAppCloudClient(
+            phone_number_id='123456789',
+            access_token=secret,
+            api_version='v25.0',
+        )
+
+        with self.assertRaises(WhatsAppAPIError) as context:
+            client.test_configuration()
+
+        error = context.exception
+        self.assertEqual(error.status_code, 401)
+        self.assertEqual(error.error_code, '190')
+        self.assertEqual(error.error_subcode, '463')
+        self.assertEqual(error.error_type, 'OAuthException')
+        self.assertEqual(error.fbtrace_id, 'safe-trace-id')
+        self.assertNotIn(secret, error.meta_message)
+        self.assertNotIn(secret, str(error))
+
+    @patch('core.services.whatsapp.client.urlopen')
+    def test_meta_http_errors_without_json_remain_safe(self, urlopen_mock):
+        for status in (400, 401, 403):
+            with self.subTest(status=status):
+                urlopen_mock.side_effect = HTTPError(
+                    url='https://graph.facebook.com/v25.0/123456789',
+                    code=status,
+                    msg='Error',
+                    hdrs=None,
+                    fp=io.BytesIO(b'not-json'),
+                )
+                client = WhatsAppCloudClient(
+                    phone_number_id='123456789',
+                    access_token='token-secreto',
+                    api_version='v25.0',
+                )
+                with self.assertRaises(WhatsAppAPIError) as context:
+                    client.test_configuration()
+                self.assertEqual(context.exception.status_code, status)
+                self.assertEqual(context.exception.error_code, '')
+                self.assertNotIn('token-secreto', str(context.exception))
+
+    @override_settings(META_ACCESS_TOKEN='token-global')
+    def test_explicit_empty_token_does_not_fall_back_to_global(self):
+        client = WhatsAppCloudClient(
+            phone_number_id='123456789',
+            access_token='',
+        )
+
+        with self.assertRaises(WhatsAppProviderError):
+            client.test_configuration()
+
+    @patch('core.services.whatsapp.client.urlopen')
     def test_send_text_handles_invalid_json(self, urlopen_mock):
         response = FakeResponse({})
         response.data = b'not-json'

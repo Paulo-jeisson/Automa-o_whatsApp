@@ -6,6 +6,8 @@ from core.models import FluxoAtendimento, Mensagem, WhatsAppIntegration
 
 from .client import WhatsAppCloudClient
 from .exceptions import WhatsAppAPIError, WhatsAppProviderError
+from .flow_engine import FlowEngine
+from .tokens import access_token_for
 
 
 logger = logging.getLogger('whatsapp.outbound')
@@ -29,7 +31,10 @@ def send_text_for_attendance(atendimento, text):
         atendimento.empresa_id,
         atendimento.pk,
     )
-    client = WhatsAppCloudClient(phone_number_id=integration.phone_number_id)
+    client = WhatsAppCloudClient(
+        phone_number_id=integration.phone_number_id,
+        access_token=access_token_for(integration),
+    )
     try:
         result = client.send_text(contato.whatsapp_id, text)
     except (WhatsAppAPIError, WhatsAppProviderError) as error:
@@ -92,7 +97,9 @@ def send_automatic_reply(inbound_message):
         )
         return None
 
-    response_text = _build_initial_response(fluxo)
+    response_text = FlowEngine.process(atendimento, inbound_message)
+    if not response_text:
+        return None
     try:
         outbound_message = send_text_for_attendance(atendimento, response_text)
     except (WhatsAppAPIError, WhatsAppProviderError):
@@ -106,8 +113,10 @@ def send_automatic_reply(inbound_message):
     )
 
     try:
+        integration = atendimento.empresa.whatsapp_integration
         WhatsAppCloudClient(
-            phone_number_id=atendimento.empresa.whatsapp_integration.phone_number_id,
+            phone_number_id=integration.phone_number_id,
+            access_token=access_token_for(integration),
         ).mark_as_read(inbound_message.external_message_id)
     except (WhatsAppAPIError, WhatsAppProviderError):
         logger.info(

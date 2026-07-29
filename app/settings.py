@@ -159,10 +159,13 @@ WHATSAPP_PROVIDER = os.environ.get('WHATSAPP_PROVIDER', 'wa.me')
 
 META_VERIFY_TOKEN = os.environ.get('META_VERIFY_TOKEN', '')
 META_APP_SECRET = os.environ.get('META_APP_SECRET', '')
+META_APP_ID = os.environ.get('META_APP_ID', '')
+META_EMBEDDED_SIGNUP_CONFIG_ID = os.environ.get('META_EMBEDDED_SIGNUP_CONFIG_ID', '')
 META_GRAPH_API_VERSION = os.environ.get('META_GRAPH_API_VERSION', 'v23.0')
 # Apenas para desenvolvimento com uma única conta de teste. Não é persistido
 # nem exibido e deverá ser substituído por cofre/criptografia no multiempresa.
 META_ACCESS_TOKEN = os.environ.get('META_ACCESS_TOKEN', '')
+WHATSAPP_TOKEN_ENCRYPTION_KEY = os.environ.get('WHATSAPP_TOKEN_ENCRYPTION_KEY', '')
 WHATSAPP_WEBHOOK_MAX_BYTES = int(os.environ.get('WHATSAPP_WEBHOOK_MAX_BYTES', 1_048_576))
 DATA_UPLOAD_MAX_MEMORY_SIZE = WHATSAPP_WEBHOOK_MAX_BYTES
 

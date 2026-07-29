@@ -12,6 +12,7 @@
     <nav class="nav-list">
       <a class="nav-item active" href="{% url 'dashboard' %}">Dashboard</a>
       <a class="nav-item" href="{% url 'atendimentos' %}">Atendimentos</a>
+      <a class="nav-item" href="{% url 'agenda' %}">Agenda</a>
       <a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a>
       <a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a>
       <a class="nav-item" href="{% url 'configuracoes' %}">Configurações</a>
@@ -49,6 +50,11 @@
         <strong class="metric-value">{{ novos_atendimentos }}</strong>
         <p>Atendimentos aguardando acompanhamento.</p>
       </article>
+      <article class="metric-card"><span class="metric-label">Agendamentos hoje</span><strong class="metric-value">{{ agendamentos_hoje }}</strong><p>Compromissos na data atual.</p></article>
+      <article class="metric-card"><span class="metric-label">Confirmados</span><strong class="metric-value">{{ agendamentos_confirmados }}</strong><p>Agendamentos confirmados.</p></article>
+      <article class="metric-card"><span class="metric-label">Pendentes</span><strong class="metric-value">{{ agendamentos_pendentes }}</strong><p>Agendamentos aguardando confirmação.</p></article>
+      <article class="metric-card"><span class="metric-label">Aguardando humano</span><strong class="metric-value">{{ aguardando_humano }}</strong><p>Conversas encaminhadas à equipe.</p></article>
+      <article class="metric-card"><span class="metric-label">Atendimentos ativos</span><strong class="metric-value">{{ atendimentos_ativos }}</strong><p>Conversas ainda abertas.</p></article>
     </section>
 
     <section class="panel">

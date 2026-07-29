@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Exclusão de Dados | ZapFluxo{% endblock %}
+{% block body %}
+<main class="legal-page">
+  <article class="legal-card">
+    <a class="legal-brand" href="{% url 'landing_page' %}"><span class="brand-mark">Z</span><strong>ZapFluxo</strong></a>
+    <span class="eyebrow">Privacidade</span>
+    <h1>Instruções para exclusão de dados</h1>
+    <p>Você pode solicitar a exclusão dos seus dados pessoais tratados pelo ZapFluxo seguindo os passos abaixo.</p>
+
+    <h2>Como solicitar</h2>
+    <ol>
+      <li>Envie um e-mail para <a href="mailto:paulojeissoncostac@gmail.com?subject=Solicitação de exclusão de dados">paulojeissoncostac@gmail.com</a>.</li>
+      <li>Use o assunto <strong>Solicitação de exclusão de dados</strong>.</li>
+      <li>Informe seu nome, número de WhatsApp com DDD e a empresa com a qual conversou.</li>
+      <li>Para sua segurança, poderemos pedir informações adicionais estritamente necessárias para confirmar sua identidade.</li>
+    </ol>
+
+    <h2>O que acontece depois</h2>
+    <p>Confirmaremos o recebimento e avaliaremos a solicitação nos prazos aplicáveis. Quando cabível, eliminaremos ou anonimizaremos contatos, mensagens, atendimentos e agendamentos vinculados ao titular.</p>
+    <p>Dados poderão ser mantidos quando necessários ao cumprimento de obrigação legal ou regulatória, exercício de direitos, prevenção a fraudes ou demais hipóteses autorizadas pela LGPD. Nesse caso, informaremos o motivo aplicável.</p>
+
+    <h2>Outros direitos</h2>
+    <p>O mesmo canal pode ser usado para solicitar acesso, correção, confirmação de tratamento ou outras providências previstas na legislação.</p>
+
+    <nav class="legal-links"><a href="{% url 'politica_privacidade' %}">Política de Privacidade</a><a href="{% url 'termos_servico' %}">Termos de Serviço</a></nav>
+  </article>
+</main>
+{% endblock %}

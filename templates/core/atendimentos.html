@@ -16,6 +16,7 @@
     <nav class="nav-list">
       <a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a>
       <a class="nav-item active" href="{% url 'atendimentos' %}">Atendimentos</a>
+      <a class="nav-item" href="{% url 'agenda' %}">Agenda</a>
       <a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a>
       <a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a>
       <a class="nav-item" href="{% url 'configuracoes' %}">Configurações</a>
@@ -113,7 +114,7 @@
 
       <div class="attendance-list">
         {% for atendimento in atendimentos %}
-          <article class="attendance-card">
+          <article class="attendance-card {% if atendimento.current_step == 'WAITING_HUMAN' %}waiting-human{% endif %}">
             <div class="attendance-main">
               <div>
                 <span class="eyebrow">{{ atendimento.criado_em|date:"d/m/Y H:i" }}</span>
@@ -157,6 +158,7 @@
               {% endif %}
             </dl>
             <div class="attendance-actions">
+              <a class="btn btn-outline" href="{% url 'atendimento_detalhe' atendimento.id %}">Ver histórico</a>
               <form method="post" action="{% url 'avisar_whatsapp_atendimento' atendimento.id %}" target="_blank" class="whatsapp-form">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
