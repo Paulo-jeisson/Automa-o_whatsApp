@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block title %}Criar conta | ZapFluxo{% endblock %}
+{% block body %}<main class="auth-page"><section class="auth-card"><h1>Comece no ZapFluxo</h1><p>Crie sua empresa e inicie o período de teste.</p><form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Criar conta</button></form><a href="{% url 'login' %}">Já tenho conta</a></section></main>{% endblock %}

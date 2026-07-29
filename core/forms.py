@@ -1,11 +1,97 @@
 import re
 
 from django import forms
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth import get_user_model
 
 from .models import (
-    Agendamento, Atendimento, BloqueioAgenda, Contato, DisponibilidadeSemanal,
+    Agendamento, AIConfiguration, Atendimento, BloqueioAgenda, Contato, DisponibilidadeSemanal,
     EmpresaCliente, FluxoAtendimento, Servico,
+    CompanyInvitation, CompanyMembership, ReminderConfiguration,
 )
+
+
+class RegistrationForm(UserCreationForm):
+    email = forms.EmailField(required=True)
+    company_name = forms.CharField(label='Nome da empresa', max_length=120)
+    segment = forms.ChoiceField(label='Segmento', choices=EmpresaCliente.SEGMENTO_CHOICES)
+
+    class Meta(UserCreationForm.Meta):
+        model = get_user_model()
+        fields = ('username', 'email', 'company_name', 'segment', 'password1', 'password2')
+
+    def clean_email(self):
+        email = self.cleaned_data['email'].strip().lower()
+        if get_user_model().objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError('Este e-mail já está em uso.')
+        return email
+
+
+class CompanyInvitationForm(forms.ModelForm):
+    class Meta:
+        model = CompanyInvitation
+        fields = ('email', 'role')
+
+    def clean_role(self):
+        role = self.cleaned_data['role']
+        if role == CompanyMembership.Role.OWNER:
+            raise forms.ValidationError('O papel de proprietário não pode ser convidado.')
+        return role
+
+
+class ReminderConfigurationForm(forms.ModelForm):
+    offsets = forms.CharField(
+        label='Antecedência em horas',
+        help_text='Exemplo: 24, 2',
+    )
+
+    class Meta:
+        model = ReminderConfiguration
+        fields = ('enabled', 'template_name', 'language_code')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['offsets'].initial = ', '.join(map(str, self.instance.offsets_hours))
+
+    def clean_offsets(self):
+        try:
+            values = sorted({int(item.strip()) for item in self.cleaned_data['offsets'].split(',')}, reverse=True)
+        except ValueError as error:
+            raise forms.ValidationError('Use somente horas inteiras separadas por vírgula.') from error
+        if not values or any(value <= 0 or value > 720 for value in values):
+            raise forms.ValidationError('Informe períodos entre 1 e 720 horas.')
+        return values
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.offsets_hours = self.cleaned_data['offsets']
+        if commit:
+            instance.save()
+        return instance
+
+
+class AIConfigurationForm(forms.ModelForm):
+    class Meta:
+        model = AIConfiguration
+        fields = [
+            'enabled',
+            'assistant_name',
+            'greeting',
+            'tone',
+            'business_description',
+            'additional_information',
+            'human_handoff_rules',
+        ]
+        widgets = {
+            'greeting': forms.Textarea(attrs={'rows': 3}),
+            'business_description': forms.Textarea(attrs={'rows': 4}),
+            'additional_information': forms.Textarea(attrs={'rows': 5}),
+            'human_handoff_rules': forms.Textarea(attrs={'rows': 4}),
+        }
+
+    def clean_assistant_name(self):
+        return self.cleaned_data['assistant_name'].strip()
 
 
 class EmpresaClienteForm(forms.ModelForm):

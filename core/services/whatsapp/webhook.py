@@ -4,8 +4,10 @@ from datetime import UTC, datetime
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.core.exceptions import PermissionDenied
 
 from core.models import Atendimento, Contato, Mensagem, WhatsAppIntegration
+from core.services.entitlements import EntitlementService
 
 from .parser import NormalizedWebhookEvent
 from .outbound import send_automatic_reply
@@ -121,6 +123,7 @@ def _persist_inbound_message(integration, event):
                 status=Atendimento.STATUS_FINALIZADO,
             ).first()
             if atendimento is None:
+                EntitlementService.consume(integration.company, 'attendances')
                 atendimento = Atendimento.objects.create(
                     empresa=integration.company,
                     contato=contato,
@@ -132,6 +135,7 @@ def _persist_inbound_message(integration, event):
                     status=Atendimento.STATUS_NOVO,
                 )
 
+            EntitlementService.consume(integration.company, 'messages')
             mensagem = Mensagem.objects.create(
                 empresa=integration.company,
                 atendimento=atendimento,
@@ -142,6 +146,11 @@ def _persist_inbound_message(integration, event):
                 texto=event.text,
                 timestamp_meta=_parse_meta_timestamp(event.timestamp),
             )
+            atendimento.last_message_at = mensagem.timestamp_meta or mensagem.criado_em
+            atendimento.save(update_fields=['last_message_at'])
+    except PermissionDenied:
+        logger.warning('whatsapp.plan_limit company_id=%s', integration.company_id)
+        return None, False
     except IntegrityError:
         # Uma entrega concorrente pode vencer a constraint única. A transação
         # atual é revertida e recuperamos a mensagem já persistida.

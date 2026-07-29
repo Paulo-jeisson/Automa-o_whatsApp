@@ -29,6 +29,8 @@ media/
 *.log
 *.tmp
 *.bak
+.tmp/
+backups/
 .idea/
 .vscode/
 .DS_Store

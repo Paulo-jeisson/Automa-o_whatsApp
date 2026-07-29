@@ -70,6 +70,37 @@ class WhatsAppCloudClient:
             raise WhatsAppAPIError('A Meta não retornou o ID da mensagem.')
         return SendTextResult(message_id=message_id)
 
+    def send_template(self, to, *, template_name, language_code, parameters):
+        self._validate_configuration(require_phone_number_id=True)
+        recipient = re.sub(r'\D', '', str(to or ''))
+        if not recipient or not re.fullmatch(r'[a-z0-9_]+', template_name):
+            raise WhatsAppProviderError('Template ou destinatário inválido.')
+        payload = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': recipient,
+            'type': 'template',
+            'template': {
+                'name': template_name,
+                'language': {'code': language_code},
+                'components': [{
+                    'type': 'body',
+                    'parameters': [
+                        {'type': 'text', 'text': str(value)[:1024]}
+                        for value in parameters
+                    ],
+                }],
+            },
+        }
+        data = self._request_json(
+            method='POST', path=f'{self.phone_number_id}/messages', payload=payload,
+        )
+        messages = data.get('messages')
+        message_id = str(messages[0].get('id', '')) if isinstance(messages, list) and messages else ''
+        if not message_id:
+            raise WhatsAppAPIError('A Meta não retornou o ID da mensagem.')
+        return SendTextResult(message_id=message_id)
+
     def mark_as_read(self, message_id):
         self._validate_configuration(require_phone_number_id=True)
         if not message_id:

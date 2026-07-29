@@ -1,6 +1,8 @@
 from django.contrib import admin
 from .models import (
     Agendamento,
+    AIConfiguration,
+    AuditEvent,
     Atendimento,
     BloqueioAgenda,
     Contato,
@@ -10,12 +12,60 @@ from .models import (
     Mensagem,
     Servico,
     WhatsAppIntegration,
+    AppointmentReminder,
+    CompanyInvitation,
+    CompanyMembership,
+    CompanyOnboarding,
+    PaymentEvent,
+    PaymentHistory,
+    Plan,
+    ReminderConfiguration,
+    Subscription,
+    UsageCounter,
 )
 
 admin.site.register(Servico)
 admin.site.register(DisponibilidadeSemanal)
 admin.site.register(BloqueioAgenda)
 admin.site.register(Agendamento)
+admin.site.register(Plan)
+admin.site.register(Subscription)
+admin.site.register(CompanyMembership)
+admin.site.register(CompanyInvitation)
+admin.site.register(CompanyOnboarding)
+admin.site.register(UsageCounter)
+admin.site.register(PaymentEvent)
+admin.site.register(PaymentHistory)
+admin.site.register(ReminderConfiguration)
+admin.site.register(AppointmentReminder)
+
+
+@admin.register(AIConfiguration)
+class AIConfigurationAdmin(admin.ModelAdmin):
+    list_display = ('empresa', 'enabled', 'assistant_name', 'updated_at')
+    list_filter = ('enabled', 'updated_at')
+    search_fields = ('empresa__nome', 'assistant_name')
+    autocomplete_fields = ('empresa',)
+
+
+@admin.register(AuditEvent)
+class AuditEventAdmin(admin.ModelAdmin):
+    list_display = ('action', 'actor', 'empresa', 'target_type', 'target_id', 'created_at')
+    list_filter = ('action', 'created_at')
+    search_fields = ('action', 'actor__username', 'empresa__nome', 'target_id')
+    readonly_fields = (
+        'actor', 'empresa', 'action', 'target_type', 'target_id',
+        'metadata', 'ip_hash', 'created_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(EmpresaCliente)
@@ -35,10 +85,10 @@ class FluxoAtendimentoAdmin(admin.ModelAdmin):
 
 @admin.register(Atendimento)
 class AtendimentoAdmin(admin.ModelAdmin):
-    list_display = ('nome_cliente', 'telefone_cliente', 'contato', 'empresa', 'opcao_escolhida', 'status', 'automation_enabled', 'avisado_em', 'criado_em')
-    list_filter = ('status', 'automation_enabled', 'avisado_em', 'criado_em')
+    list_display = ('nome_cliente', 'telefone_cliente', 'contato', 'empresa', 'status', 'current_step', 'assigned_to', 'automation_enabled', 'last_message_at', 'criado_em')
+    list_filter = ('status', 'current_step', 'automation_enabled', 'avisado_em', 'criado_em')
     search_fields = ('nome_cliente', 'telefone_cliente', 'empresa__nome', 'opcao_escolhida')
-    autocomplete_fields = ('empresa', 'contato')
+    autocomplete_fields = ('empresa', 'contato', 'assigned_to', 'closed_by')
 
 
 @admin.register(WhatsAppIntegration)

@@ -15,6 +15,11 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+O comando local usa `app.settings_development` e SQLite. WSGI e ASGI usam
+`app.settings_production`, que exige PostgreSQL e as variáveis `POSTGRES_*`.
+O procedimento completo de servidor, Nginx, Gunicorn, backup e restauração está
+em [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
 Endereços locais:
 
 - Site: `http://127.0.0.1:8000/`
@@ -41,6 +46,27 @@ O projeto carrega o arquivo `.env` local sem substituir variáveis já definidas
 | `META_ACCESS_TOKEN` | Token legado opcional, somente para integrações manuais antigas |
 | `WHATSAPP_TOKEN_ENCRYPTION_KEY` | Chave Fernet exclusiva para criptografar tokens por empresa |
 | `SQLITE_NAME` | Caminho opcional do SQLite |
+| `POSTGRES_DB` | Nome do banco PostgreSQL de produção |
+| `POSTGRES_USER` | Usuário exclusivo da aplicação |
+| `POSTGRES_PASSWORD` | Senha obtida do ambiente/cofre |
+| `POSTGRES_HOST` | Host do PostgreSQL |
+| `POSTGRES_PORT` | Porta do PostgreSQL; padrão 5432 |
+| `SESSION_COOKIE_AGE` | Expiração da sessão em segundos |
+| `EMAIL_HOST` | Servidor SMTP para recuperação de senha |
+| `EMAIL_HOST_USER` | Usuário SMTP |
+| `EMAIL_HOST_PASSWORD` | Senha SMTP, somente pelo ambiente |
+| `DEFAULT_FROM_EMAIL` | Remetente dos e-mails transacionais |
+| `OPENAI_API_KEY` | Chave da OpenAI, exclusiva do backend |
+| `AI_ENABLED` | Kill switch global da integração de IA |
+| `AI_MODEL` | Modelo utilizado pelo adaptador; padrão `gpt-5.6` |
+| `AI_TIMEOUT` | Timeout da chamada ao provedor em segundos |
+| `AI_CONTEXT_MESSAGE_LIMIT` | Quantidade máxima de mensagens recentes no contexto |
+| `AI_CONTEXT_SUMMARY_TRIGGER` | Total de mensagens que dispara a compactação |
+| `AI_CONTEXT_SUMMARY_MAX_CHARS` | Tamanho máximo do resumo persistido |
+| `STRIPE_SECRET_KEY` | Chave secreta do backend Stripe |
+| `STRIPE_WEBHOOK_SECRET` | Segredo de assinatura do webhook Stripe |
+| `STRIPE_API_VERSION` | Versão fixada da API Stripe |
+| `TRIAL_DAYS` | Duração do período de teste |
 
 Os tokens obtidos pelo Embedded Signup são criptografados por empresa e nunca são
 renderizados no navegador ou no admin.
@@ -237,6 +263,17 @@ python manage.py check
 python manage.py makemigrations --check --dry-run
 python manage.py test
 ```
+
+O endpoint `GET /health/` verifica a aplicação e executa uma consulta mínima no
+banco. Em produção, uma resposta saudável deve informar
+`database_engine: postgresql`.
+
+As regras de segredos, rotação, logs, auditoria e resposta a incidentes estão em
+[`docs/SECURITY.md`](docs/SECURITY.md).
+
+A fundação da integração com IA está descrita em
+[`docs/AI_ARCHITECTURE.md`](docs/AI_ARCHITECTURE.md). Nesta etapa ela não está
+ligada automaticamente ao webhook.
 
 ## Limites atuais
 

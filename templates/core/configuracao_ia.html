@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Configuração da IA | ZapFluxo{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Menu principal">
+    <div class="brand">
+      <span class="brand-mark">Z</span>
+      <div><strong>ZapFluxo</strong><small>Atendimento simples</small></div>
+    </div>
+    <nav class="nav-list">
+      <a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a>
+      <a class="nav-item" href="{% url 'atendimentos' %}">Atendimentos</a>
+      <a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a>
+      <a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a>
+      <a class="nav-item active" href="{% url 'configuracoes' %}">Configurações</a>
+    </nav>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar">
+      <div>
+        <span class="eyebrow">Assistente da empresa</span>
+        <h1>Configuração da IA</h1>
+      </div>
+    </header>
+
+    <section class="settings-layout">
+      <div class="panel settings-main">
+        {% if messages %}
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+
+        {% if not global_ai_enabled or not openai_ready %}
+          <div class="alert">
+            A integração global ainda não está disponível. Salve a personalidade agora;
+            a ativação efetiva depende de AI_ENABLED e OPENAI_API_KEY no servidor.
+          </div>
+        {% endif %}
+
+        <form method="post" class="company-form" novalidate>
+          {% csrf_token %}
+          {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
+          <div class="form-grid">
+            {% for field in form %}
+              <div class="form-field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <a class="btn btn-outline" href="{% url 'configuracoes' %}">Voltar</a>
+            <button class="btn btn-primary" type="submit">Salvar configuração</button>
+          </div>
+        </form>
+      </div>
+
+      <aside class="settings-summary">
+        <article class="settings-info-card">
+          <span class="eyebrow">Empresa</span>
+          <strong>{{ empresa.nome }}</strong>
+          <small>Modelo global: {{ ai_model }}</small>
+        </article>
+        <article class="settings-info-card">
+          <span class="eyebrow">Estado efetivo</span>
+          <strong>{% if configuration.is_available %}Disponível{% else %}Desativada{% endif %}</strong>
+          <small>Nenhuma chave é armazenada nesta página ou no banco da empresa.</small>
+        </article>
+      </aside>
+    </section>
+  </main>
+</div>
+{% endblock %}

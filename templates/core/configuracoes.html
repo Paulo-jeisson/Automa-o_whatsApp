@@ -73,6 +73,14 @@
 
       <aside class="settings-summary">
         <article class="settings-info-card">
+          <span class="eyebrow">Inteligência artificial</span>
+          <strong>Configuração por empresa</strong>
+          <small>A chave da OpenAI permanece somente no servidor.</small>
+          <a class="btn btn-outline settings-test-button" href="{% url 'configuracao_ia' %}">
+            Configurar IA
+          </a>
+        </article>
+        <article class="settings-info-card">
           <span class="eyebrow">Conta</span>
           <strong>{{ request.user.username }}</strong>
           <small>Usuário de acesso</small>

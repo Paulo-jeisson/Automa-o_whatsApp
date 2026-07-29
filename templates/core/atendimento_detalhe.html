@@ -1,3 +1,65 @@
 {% extends "base.html" %}
 {% block title %}Atendimento | ZapFluxo{% endblock %}
-{% block body %}<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">Z</span><div><strong>ZapFluxo</strong><small>Atendimento simples</small></div></div><nav class="nav-list"><a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a><a class="nav-item active" href="{% url 'atendimentos' %}">Atendimentos</a><a class="nav-item" href="{% url 'agenda' %}">Agenda</a></nav></aside><main class="main-area"><header class="topbar"><div><span class="eyebrow">Atendimento</span><h1>{{ atendimento.nome_cliente }}</h1></div>{% if atendimento.current_step == "WAITING_HUMAN" %}<form method="post" action="{% url 'assumir_atendimento' atendimento.id %}">{% csrf_token %}<button class="btn btn-primary">Assumir atendimento</button></form>{% endif %}</header><section class="panel"><h2>Resumo</h2><dl class="attendance-details"><div><dt>Contato</dt><dd>{{ atendimento.contato }}</dd></div><div><dt>Status</dt><dd>{{ atendimento.get_status_display }}</dd></div><div><dt>Etapa</dt><dd>{{ atendimento.get_current_step_display }}</dd></div><div><dt>Automação</dt><dd>{% if atendimento.automation_enabled %}Ativa{% else %}Inativa{% endif %}</dd></div></dl></section><section class="panel"><h2>Agendamentos relacionados</h2><div class="recent-list">{% for item in atendimento.agendamentos.all %}<a class="recent-item" href="{% url 'agendamento_detalhe' item.id %}">{{ item }}</a>{% empty %}<p>Nenhum agendamento relacionado.</p>{% endfor %}</div></section><section class="panel"><h2>Histórico de mensagens</h2><div class="recent-list">{% for item in atendimento.mensagens.all reversed %}<div class="recent-item"><div><strong>{{ item.get_direcao_display }}</strong><small>{{ item.criado_em|date:"d/m/Y H:i" }}</small></div><span>{{ item.texto }}</span></div>{% empty %}<p>Nenhuma mensagem.</p>{% endfor %}</div></section></main></div>{% endblock %}
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">Z</span><div><strong>ZapFluxo</strong><small>Central de atendimento</small></div></div>
+    <nav class="nav-list"><a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a><a class="nav-item active" href="{% url 'atendimentos' %}">Inbox</a><a class="nav-item" href="{% url 'agenda' %}">Agenda</a></nav>
+  </aside>
+  <main class="main-area">
+    <header class="topbar">
+      <div><span class="eyebrow">Atendimento</span><h1>{{ atendimento.nome_cliente }}</h1></div>
+      <div class="topbar-actions"><span id="live-state" class="status-pill">{{ atendimento.get_current_step_display }}</span>{% if atendimento.current_step == "WAITING_HUMAN" %}<form method="post" action="{% url 'assumir_atendimento' atendimento.id %}">{% csrf_token %}<button class="btn btn-primary">Assumir</button></form>{% endif %}</div>
+    </header>
+    {% if messages %}<div class="messages">{% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+    <section class="panel">
+      <h2>Resumo</h2>
+      <dl class="attendance-details">
+        <div><dt>Contato</dt><dd>{{ atendimento.contato }}</dd></div><div><dt>Status</dt><dd>{{ atendimento.get_status_display }}</dd></div>
+        <div><dt>Responsável</dt><dd id="live-assignee">{{ atendimento.assigned_to|default:"Não atribuído" }}</dd></div><div><dt>Automação</dt><dd id="live-automation">{% if atendimento.automation_enabled %}Ativa{% else %}Inativa{% endif %}</dd></div>
+        {% if atendimento.handoff_reason %}<div class="full"><dt>Motivo da transferência</dt><dd>{{ atendimento.handoff_reason }}</dd></div>{% endif %}
+      </dl>
+      <div class="attendance-actions">{% if atendimento.current_step == "HUMAN" %}<form method="post" action="{% url 'devolver_atendimento_ia' atendimento.id %}">{% csrf_token %}<button class="btn btn-outline">Devolver para IA</button></form>{% endif %}{% if atendimento.current_step != "FINISHED" %}<form method="post" action="{% url 'finalizar_atendimento' atendimento.id %}">{% csrf_token %}<button class="btn btn-outline">Finalizar</button></form>{% endif %}</div>
+    </section>
+    <section class="panel">
+      <h2>Conversa</h2>
+      <div id="message-list" class="conversation-list">
+        {% for item in atendimento.mensagens.all reversed %}<article class="conversation-message direction-{{ item.direcao }}" data-message-id="{{ item.id }}"><div><strong>{% if item.direcao == "entrada" %}Cliente{% elif item.sent_by %}{{ item.sent_by }}{% else %}Assistente{% endif %}</strong><small>{{ item.criado_em|date:"d/m/Y H:i" }}</small></div><p>{{ item.texto }}</p><small>{{ item.get_status_display }}</small></article>{% empty %}<p id="empty-messages">Nenhuma mensagem.</p>{% endfor %}
+      </div>
+      {% if atendimento.current_step == "HUMAN" and atendimento.assigned_to_id == request.user.id %}
+        <form method="post" action="{% url 'enviar_mensagem_atendimento' atendimento.id %}" class="manual-message-form">{% csrf_token %}<label for="manual-message">Responder pelo WhatsApp</label><textarea id="manual-message" name="texto" maxlength="4000" required></textarea><button class="btn btn-primary" type="submit">Enviar mensagem</button></form>
+      {% elif atendimento.current_step == "HUMAN" %}<p class="panel-description">Este atendimento está atribuído a {{ atendimento.assigned_to|default:"outro operador" }}.</p>{% endif %}
+    </section>
+    <section class="panel"><h2>Agendamentos relacionados</h2><div class="recent-list">{% for item in atendimento.agendamentos.all %}<a class="recent-item" href="{% url 'agendamento_detalhe' item.id %}">{{ item }}</a>{% empty %}<p>Nenhum agendamento relacionado.</p>{% endfor %}</div></section>
+  </main>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(() => {
+  const endpoint = "{% url 'atendimento_eventos' atendimento.id %}", list = document.getElementById("message-list");
+  let lastId = Number(list.querySelector("[data-message-id]:last-of-type")?.dataset.messageId || 0);
+  const labels = {WAITING_HUMAN:"Aguardando humano",HUMAN:"Em atendimento humano",FINISHED:"Finalizado",MENU:"IA atendendo"};
+  async function refresh() {
+    if (document.hidden) return;
+    try {
+      const response = await fetch(`${endpoint}?after=${lastId}`, {headers:{Accept:"application/json"}});
+      if (!response.ok) return;
+      const data = await response.json();
+      document.getElementById("live-state").textContent = labels[data.attendance.step] || data.attendance.step;
+      document.getElementById("live-assignee").textContent = data.attendance.assigned_to || "Não atribuído";
+      document.getElementById("live-automation").textContent = data.attendance.automation_enabled ? "Ativa" : "Inativa";
+      for (const item of data.messages) {
+        if (document.querySelector(`[data-message-id="${item.id}"]`)) continue;
+        document.getElementById("empty-messages")?.remove();
+        const article=document.createElement("article"), meta=document.createElement("div"), author=document.createElement("strong"), body=document.createElement("p");
+        article.className=`conversation-message direction-${item.direction}`; article.dataset.messageId=item.id;
+        author.textContent=item.direction==="entrada"?"Cliente":(item.sent_by||"Assistente"); body.textContent=item.text;
+        meta.appendChild(author); article.append(meta,body); list.appendChild(article); lastId=Math.max(lastId,item.id);
+      }
+    } catch (_) {}
+  }
+  setInterval(refresh,3000);
+})();
+</script>
+{% endblock %}

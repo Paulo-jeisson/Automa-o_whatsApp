@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils.text import slugify
+from django.utils import timezone
 
 
 class EmpresaCliente(models.Model):
@@ -360,6 +361,29 @@ class Atendimento(models.Model):
     automation_enabled = models.BooleanField('automação ativa', default=True)
     current_step = models.CharField('etapa atual', max_length=24, choices=Step.choices, default=Step.MENU)
     flow_context = models.JSONField('contexto da conversa', default=dict, blank=True)
+    conversation_state = models.JSONField('estado estruturado da conversa', default=dict, blank=True)
+    conversation_summary = models.TextField('resumo da conversa', blank=True)
+    summarized_message_count = models.PositiveIntegerField('mensagens incluídas no resumo', default=0)
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_attendances',
+        verbose_name='responsável atual',
+    )
+    assigned_at = models.DateTimeField('assumido em', null=True, blank=True)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='closed_attendances',
+        verbose_name='finalizado por',
+    )
+    closed_at = models.DateTimeField('finalizado em', null=True, blank=True)
+    handoff_reason = models.CharField('motivo da transferência', max_length=500, blank=True)
+    last_message_at = models.DateTimeField('última mensagem em', null=True, blank=True, db_index=True)
     criado_em = models.DateTimeField('criado em', auto_now_add=True)
     avisado_em = models.DateTimeField('avisado em', null=True, blank=True)
 
@@ -370,6 +394,28 @@ class Atendimento(models.Model):
 
     def __str__(self):
         return f'{self.nome_cliente} - {self.empresa.nome}'
+
+    @property
+    def inbox_state(self):
+        if self.status == self.STATUS_FINALIZADO or self.current_step == self.Step.FINISHED:
+            return 'finished'
+        if self.current_step == self.Step.WAITING_HUMAN:
+            return 'waiting_human'
+        if self.current_step == self.Step.HUMAN:
+            return 'human'
+        if self.status == self.STATUS_NOVO and not self.mensagens.exists():
+            return 'new'
+        return 'ai' if self.automation_enabled else 'new'
+
+    @property
+    def inbox_state_label(self):
+        return {
+            'new': 'Novo',
+            'ai': 'IA atendendo',
+            'waiting_human': 'Aguardando humano',
+            'human': 'Em atendimento humano',
+            'finished': 'Finalizado',
+        }[self.inbox_state]
 
 
 class Mensagem(models.Model):
@@ -428,6 +474,14 @@ class Mensagem(models.Model):
         default=STATUS_RECEBIDA,
     )
     erro_codigo = models.CharField('código de erro', max_length=32, blank=True)
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sent_whatsapp_messages',
+        verbose_name='enviada por',
+    )
     timestamp_meta = models.DateTimeField('horário na Meta', null=True, blank=True)
     criado_em = models.DateTimeField('criada em', auto_now_add=True)
 
@@ -556,3 +610,209 @@ class Agendamento(models.Model):
 
     def __str__(self):
         return f'{self.servico} - {self.data:%d/%m/%Y} {self.hora_inicio:%H:%M}'
+
+
+class RateLimitBucket(models.Model):
+    key = models.CharField(max_length=64, unique=True)
+    window_started_at = models.DateTimeField()
+    count = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'bucket de limitação'
+        verbose_name_plural = 'buckets de limitação'
+
+
+class AuditEvent(models.Model):
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='zapfluxo_audit_events',
+    )
+    empresa = models.ForeignKey(
+        EmpresaCliente,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_events',
+    )
+    action = models.CharField(max_length=80)
+    target_type = models.CharField(max_length=80, blank=True)
+    target_id = models.CharField(max_length=80, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    ip_hash = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['empresa', '-created_at']),
+            models.Index(fields=['action', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.action} em {self.created_at:%d/%m/%Y %H:%M}'
+
+
+class AIConfiguration(models.Model):
+    empresa = models.OneToOneField(
+        EmpresaCliente,
+        on_delete=models.CASCADE,
+        related_name='ai_configuration',
+    )
+    enabled = models.BooleanField('IA ativa', default=False)
+    assistant_name = models.CharField('nome do assistente', max_length=80, default='Assistente')
+    greeting = models.CharField('mensagem inicial', max_length=300, blank=True)
+    tone = models.CharField('tom de atendimento', max_length=120, default='cordial e objetivo')
+    business_description = models.TextField('descrição do estabelecimento', blank=True)
+    additional_information = models.TextField('informações adicionais', blank=True)
+    human_handoff_rules = models.TextField(
+        'quando transferir para humano',
+        blank=True,
+        default='Quando o cliente solicitar uma pessoa ou o assunto estiver fora do escopo.',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'configuração de IA'
+        verbose_name_plural = 'configurações de IA'
+
+    @property
+    def is_available(self):
+        return self.enabled and settings.AI_ENABLED and bool(settings.OPENAI_API_KEY)
+
+    def __str__(self):
+        return f'IA - {self.empresa.nome}'
+
+
+class CompanyMembership(models.Model):
+    class Role(models.TextChoices):
+        OWNER = 'OWNER', 'Proprietário'
+        ADMIN = 'ADMIN', 'Administrador'
+        RECEPTIONIST = 'RECEPTIONIST', 'Recepcionista'
+        AGENT = 'AGENT', 'Atendente'
+
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='memberships')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='company_memberships')
+    role = models.CharField(max_length=20, choices=Role.choices)
+    is_active = models.BooleanField(default=True)
+    invited_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_company_memberships')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['empresa', 'user'], name='unique_company_membership')]
+
+
+class CompanyInvitation(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='invitations')
+    email = models.EmailField()
+    role = models.CharField(max_length=20, choices=CompanyMembership.Role.choices)
+    token_hash = models.CharField(max_length=64, unique=True)
+    invited_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='company_invitations')
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Plan(models.Model):
+    name = models.CharField(max_length=80)
+    code = models.SlugField(unique=True)
+    price_cents = models.PositiveIntegerField(default=0)
+    stripe_price_id = models.CharField(max_length=120, blank=True)
+    operator_limit = models.PositiveIntegerField(default=1)
+    attendance_limit = models.PositiveIntegerField(default=100)
+    message_limit = models.PositiveIntegerField(default=1000)
+    ai_call_limit = models.PositiveIntegerField(default=500)
+    whatsapp_limit = models.PositiveIntegerField(default=1)
+    ai_enabled = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Subscription(models.Model):
+    class Status(models.TextChoices):
+        TRIAL = 'TRIAL', 'Período de teste'
+        ACTIVE = 'ACTIVE', 'Ativa'
+        PAST_DUE = 'PAST_DUE', 'Pagamento pendente'
+        SUSPENDED = 'SUSPENDED', 'Suspensa'
+        CANCELED = 'CANCELED', 'Cancelada'
+
+    empresa = models.OneToOneField(EmpresaCliente, on_delete=models.CASCADE, related_name='subscription')
+    plan = models.ForeignKey(Plan, on_delete=models.PROTECT, related_name='subscriptions')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.TRIAL)
+    trial_ends_at = models.DateTimeField(null=True, blank=True)
+    current_period_end = models.DateTimeField(null=True, blank=True)
+    stripe_customer_id = models.CharField(max_length=120, blank=True)
+    stripe_subscription_id = models.CharField(max_length=120, blank=True, unique=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def has_access(self):
+        return self.status in {self.Status.TRIAL, self.Status.ACTIVE}
+
+
+class UsageCounter(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='usage_counters')
+    period = models.CharField(max_length=7)
+    attendances = models.PositiveIntegerField(default=0)
+    messages = models.PositiveIntegerField(default=0)
+    ai_calls = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['empresa', 'period'], name='unique_usage_period')]
+
+
+class PaymentEvent(models.Model):
+    external_id = models.CharField(max_length=120, unique=True)
+    event_type = models.CharField(max_length=80)
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+
+class PaymentHistory(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='payment_history')
+    external_id = models.CharField(max_length=120, unique=True)
+    status = models.CharField(max_length=30)
+    amount_cents = models.PositiveIntegerField(default=0)
+    currency = models.CharField(max_length=3, default='brl')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CompanyOnboarding(models.Model):
+    empresa = models.OneToOneField(EmpresaCliente, on_delete=models.CASCADE, related_name='onboarding')
+    test_completed = models.BooleanField(default=False)
+    activated_at = models.DateTimeField(null=True, blank=True)
+
+
+def default_reminder_offsets():
+    return [24, 2]
+
+
+class ReminderConfiguration(models.Model):
+    empresa = models.OneToOneField(EmpresaCliente, on_delete=models.CASCADE, related_name='reminder_configuration')
+    enabled = models.BooleanField(default=False)
+    offsets_hours = models.JSONField(default=default_reminder_offsets)
+    template_name = models.CharField(max_length=120, default='lembrete_agendamento')
+    language_code = models.CharField(max_length=12, default='pt_BR')
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class AppointmentReminder(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pendente'
+        SENT = 'SENT', 'Enviado'
+        FAILED = 'FAILED', 'Falhou'
+
+    appointment = models.ForeignKey(Agendamento, on_delete=models.CASCADE, related_name='reminders')
+    offset_hours = models.PositiveIntegerField()
+    scheduled_for = models.DateTimeField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    external_message_id = models.CharField(max_length=255, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error_code = models.CharField(max_length=32, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['appointment', 'offset_hours'], name='unique_appointment_reminder')]

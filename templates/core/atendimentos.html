@@ -15,7 +15,7 @@
 
     <nav class="nav-list">
       <a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a>
-      <a class="nav-item active" href="{% url 'atendimentos' %}">Atendimentos</a>
+      <a class="nav-item active" href="{% url 'atendimentos' %}">Inbox</a>
       <a class="nav-item" href="{% url 'agenda' %}">Agenda</a>
       <a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a>
       <a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a>
@@ -76,6 +76,15 @@
 
       <form method="get" class="filters-form">
         <div class="form-field">
+          <label for="fila">Fila</label>
+          <select id="fila" name="fila">
+            <option value="">Todas</option>
+            {% for value, label in fila_choices %}
+              <option value="{{ value }}" {% if filtros.fila == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
           <label for="status">Status</label>
           <select id="status" name="status">
             <option value="">Todos</option>
@@ -108,7 +117,7 @@
       <div class="panel-header">
         <div>
           <span class="eyebrow">Lista</span>
-          <h2>Atendimentos recebidos</h2>
+          <h2>Inbox de atendimentos</h2>
         </div>
       </div>
 
@@ -117,10 +126,10 @@
           <article class="attendance-card {% if atendimento.current_step == 'WAITING_HUMAN' %}waiting-human{% endif %}">
             <div class="attendance-main">
               <div>
-                <span class="eyebrow">{{ atendimento.criado_em|date:"d/m/Y H:i" }}</span>
+                <span class="eyebrow">{% if atendimento.last_message_at %}{{ atendimento.last_message_at|date:"d/m/Y H:i" }}{% else %}{{ atendimento.criado_em|date:"d/m/Y H:i" }}{% endif %}</span>
                 <h3>{{ atendimento.nome_cliente }}</h3>
               </div>
-              <span class="status-pill status-{{ atendimento.status }}">{{ atendimento.get_status_display }}</span>
+              <span class="status-pill">{{ atendimento.inbox_state_label }}</span>
             </div>
             <dl class="attendance-details">
               <div>
@@ -128,17 +137,18 @@
                 <dd>{{ atendimento.telefone_cliente }}</dd>
               </div>
               <div>
-                <dt>Opção</dt>
-                <dd>{{ atendimento.opcao_escolhida }}</dd>
+                <dt>Responsável</dt>
+                <dd>{{ atendimento.assigned_to|default:"Não atribuído" }}</dd>
               </div>
               <div>
                 <dt>Segmento</dt>
                 <dd>{{ atendimento.empresa.get_segmento_display }}</dd>
               </div>
               <div class="full">
-                <dt>Necessidade</dt>
-                <dd>{{ atendimento.necessidade }}</dd>
+                <dt>Última mensagem</dt>
+                <dd>{% with ultima=atendimento.mensagens.first %}{% if ultima %}{{ ultima.texto|truncatechars:120 }}{% else %}{{ atendimento.necessidade }}{% endif %}{% endwith %}</dd>
               </div>
+              {% if atendimento.handoff_reason %}<div class="full"><dt>Motivo da transferência</dt><dd>{{ atendimento.handoff_reason }}</dd></div>{% endif %}
               <div>
                 <dt>Aviso ao dono</dt>
                 <dd class="notice-detail">
@@ -189,4 +199,23 @@
     </section>
   </main>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(() => {
+  let signature = "";
+  async function refreshInbox() {
+    if (document.hidden) return;
+    try {
+      const response = await fetch("{% url 'inbox_eventos' %}", {headers:{Accept:"application/json"}});
+      if (!response.ok) return;
+      const next = JSON.stringify(await response.json());
+      if (signature && signature !== next) window.location.reload();
+      signature = next;
+    } catch (_) {}
+  }
+  refreshInbox();
+  setInterval(refreshInbox,5000);
+})();
+</script>
 {% endblock %}

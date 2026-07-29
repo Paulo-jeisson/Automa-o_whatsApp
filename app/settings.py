@@ -73,6 +73,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.middleware.RateLimitMiddleware',
+    'core.access.RolePermissionMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -143,8 +145,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
-
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
@@ -168,6 +173,19 @@ META_ACCESS_TOKEN = os.environ.get('META_ACCESS_TOKEN', '')
 WHATSAPP_TOKEN_ENCRYPTION_KEY = os.environ.get('WHATSAPP_TOKEN_ENCRYPTION_KEY', '')
 WHATSAPP_WEBHOOK_MAX_BYTES = int(os.environ.get('WHATSAPP_WEBHOOK_MAX_BYTES', 1_048_576))
 DATA_UPLOAD_MAX_MEMORY_SIZE = WHATSAPP_WEBHOOK_MAX_BYTES
+
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '').strip()
+AI_ENABLED = os.environ.get('AI_ENABLED', 'False').lower() in {'1', 'true', 'yes', 'on'}
+AI_MODEL = os.environ.get('AI_MODEL', 'gpt-5.6').strip()
+AI_TIMEOUT = float(os.environ.get('AI_TIMEOUT', '20'))
+AI_CONTEXT_MESSAGE_LIMIT = int(os.environ.get('AI_CONTEXT_MESSAGE_LIMIT', '12'))
+AI_CONTEXT_SUMMARY_TRIGGER = int(os.environ.get('AI_CONTEXT_SUMMARY_TRIGGER', '20'))
+AI_CONTEXT_SUMMARY_MAX_CHARS = int(os.environ.get('AI_CONTEXT_SUMMARY_MAX_CHARS', '2000'))
+
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+STRIPE_API_VERSION = os.environ.get('STRIPE_API_VERSION', '2025-06-30.basil')
+TRIAL_DAYS = int(os.environ.get('TRIAL_DAYS', '14'))
 
 LOGGING = {
     'version': 1,
