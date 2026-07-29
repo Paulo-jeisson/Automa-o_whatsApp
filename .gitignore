@@ -1,5 +1,35 @@
-venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Django e dados locais
 db.sqlite3
+db.sqlite3-*
+*.sqlite3
+*.sqlite3-journal
+staticfiles/
+media/
+
+# Configurações locais e segredos
 .env
+.env.*
+!.env.example
+
+# Logs, temporários e IDEs
+*.log
+*.tmp
+*.bak
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
