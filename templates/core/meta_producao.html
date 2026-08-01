@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Meta em produção | ZapFluxo{% endblock %}
+{% block body %}
+<main class="main-area">
+  <header class="topbar"><div><span class="eyebrow">{{ empresa.nome }}</span><h1>Prontidão Meta em produção</h1></div><span class="status-pill">{% if report.ready %}Pronto{% else %}Pendências{% endif %}</span></header>
+  {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+  <section class="content-grid">
+    <article class="panel"><h2>Checklist técnico e externo</h2><div class="recent-list">
+      {% for item in report.items %}<div class="recent-item"><strong>{% if item.ready %}✓{% else %}Pendente{% endif %} {{ item.label }}</strong><span>{{ item.detail }}</span></div>{% endfor %}
+    </div></article>
+    <article class="panel"><h2>Registrar teste real</h2><p>Marque apenas itens efetivamente validados no Meta Business Manager e com números reais.</p>
+      <form method="post" class="company-form">{% csrf_token %}
+        {% for field in form %}<div class="form-field"><label>{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
+        <button class="btn btn-primary">Registrar verificação</button>
+      </form>
+    </article>
+  </section>
+</main>
+{% endblock %}

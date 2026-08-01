@@ -1,6 +1,8 @@
 """Orquestra uma resposta de IA para uma mensagem já autenticada."""
 
 import logging
+import time
+from decimal import Decimal
 
 from django.db import transaction
 
@@ -40,6 +42,7 @@ class AIConversationService:
         return configuration
 
     def reply(self, *, inbound_message):
+        started = time.monotonic()
         atendimento = inbound_message.atendimento
         configuration = self.is_enabled(atendimento)
         if configuration is None:
@@ -57,8 +60,18 @@ class AIConversationService:
                 atendimento=atendimento,
                 user_input=inbound_message.texto,
             )
+            self._record_usage(
+                atendimento, response=response,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
             return validate_ai_output(response.text)
         except (AIServiceError, PermissionDenied) as error:
+            from core.services.observability import record_metric
+            record_metric('ai.failure', empresa=atendimento.empresa, labels={'type': type(error).__name__})
+            self._record_usage(
+                atendimento, error=error,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
             logger.warning(
                 'ai.conversation.failed company_id=%s attendance_id=%s type=%s',
                 atendimento.empresa_id, atendimento.pk, type(error).__name__,
@@ -66,12 +79,39 @@ class AIConversationService:
             self._handoff(atendimento, 'Falha no atendimento automático.')
             return FALLBACK_MESSAGE
         except Exception as error:
+            from core.services.observability import record_metric
+            record_metric('ai.failure', empresa=atendimento.empresa, labels={'type': type(error).__name__})
+            self._record_usage(
+                atendimento, error=error,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
             logger.exception(
                 'ai.conversation.unexpected company_id=%s attendance_id=%s type=%s',
                 atendimento.empresa_id, atendimento.pk, type(error).__name__,
             )
             self._handoff(atendimento, 'Falha inesperada no atendimento automático.')
             return FALLBACK_MESSAGE
+
+    @staticmethod
+    def _record_usage(atendimento, *, response=None, error=None, latency_ms=0):
+        from django.conf import settings
+        from core.models import AIUsageRecord
+        input_tokens = int(getattr(response, 'input_tokens', 0) or 0)
+        output_tokens = int(getattr(response, 'output_tokens', 0) or 0)
+        cost = (
+            Decimal(input_tokens) * settings.AI_INPUT_COST_PER_MILLION
+            + Decimal(output_tokens) * settings.AI_OUTPUT_COST_PER_MILLION
+        ) / Decimal(1_000_000)
+        AIUsageRecord.objects.create(
+            empresa=atendimento.empresa, atendimento=atendimento,
+            provider_response_id=getattr(response, 'provider_response_id', ''),
+            model=settings.AI_MODEL, input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            tool_calls=int(getattr(response, 'tool_calls', 0) or 0),
+            latency_ms=max(0, latency_ms), succeeded=error is None,
+            error_type=type(error).__name__ if error else '',
+            estimated_cost_usd=cost,
+        )
 
     @staticmethod
     def _handoff(atendimento, reason):

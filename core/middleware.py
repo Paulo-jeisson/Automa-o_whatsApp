@@ -12,6 +12,7 @@ from .security import client_ip
 class RateLimitMiddleware:
     POLICIES = (
         ('login', lambda r: r.path == '/login/' and r.method == 'POST', 10, 300),
+        ('api_token', lambda r: r.path.startswith('/api/auth/') and r.method == 'POST', 20, 300),
         ('webhook', lambda r: r.path == '/webhooks/whatsapp/', 120, 60),
         (
             'public_attendance',
@@ -76,3 +77,20 @@ class RateLimitMiddleware:
                 if attempt:
                     return True
         return True
+
+
+class SecurityHeadersMiddleware:
+    """Headers defensivos centralizados para HTML e APIs."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        response.setdefault('X-Content-Type-Options', 'nosniff')
+        response.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
+        response.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
+        response.setdefault('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self'")
+        response.setdefault('Cache-Control', 'no-store' if request.user.is_authenticated else response.get('Cache-Control', ''))
+        return response

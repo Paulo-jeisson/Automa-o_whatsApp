@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ZapFluxo queue worker continuously
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=5s
+Unit=zapfluxo-worker.service
+
+[Install]
+WantedBy=timers.target

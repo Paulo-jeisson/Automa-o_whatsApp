@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Privacidade e dados | ZapFluxo{% endblock %}
+{% block body %}
+<main class="main-area">
+  <header class="topbar"><div><span class="eyebrow">{{ empresa.nome }}</span><h1>Privacidade e ciclo dos dados</h1></div></header>
+  {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+  <section class="content-grid">
+    <article class="panel">
+      <h2>Política de retenção</h2>
+      <form method="post" class="company-form">{% csrf_token %}<input type="hidden" name="action" value="policy">
+        {% for field in policy_form %}<div class="form-field"><label>{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
+        <button class="btn btn-primary">Salvar política</button>
+      </form>
+    </article>
+    <article class="panel">
+      <h2>Registrar solicitação do titular</h2>
+      <form method="post" class="company-form">{% csrf_token %}<input type="hidden" name="action" value="request">
+        {% for field in request_form %}<div class="form-field"><label>{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
+        <button class="btn btn-primary">Registrar</button>
+      </form>
+    </article>
+  </section>
+  <section class="panel"><h2>Solicitações</h2><div class="recent-list">
+    {% for item in privacy_requests %}<div class="recent-item">
+      <span>{{ item.get_request_type_display }} · {{ item.whatsapp_id }} · {{ item.get_status_display }}</span>
+      <div class="attendance-actions">
+        <a class="btn btn-outline" href="{% url 'privacidade_exportar' item.pk %}">Exportar</a>
+        {% if item.status == "RECEIVED" or item.status == "VERIFYING" %}<form method="post" action="{% url 'privacidade_aprovar' item.pk %}">{% csrf_token %}<button class="btn btn-outline">Aprovar</button></form>{% endif %}
+        {% if item.request_type == "DELETION" and item.status == "APPROVED" %}<form method="post" action="{% url 'privacidade_executar' item.pk %}">{% csrf_token %}<button class="btn btn-primary">Executar anonimização</button></form>{% endif %}
+      </div>
+    </div>{% empty %}<p>Nenhuma solicitação registrada.</p>{% endfor %}
+  </div></section>
+</main>
+{% endblock %}

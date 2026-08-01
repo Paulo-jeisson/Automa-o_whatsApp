@@ -1,0 +1,11 @@
+[Unit]
+Description=ZapFluxo data retention
+After=network.target zapfluxo.service
+
+[Service]
+Type=oneshot
+User=zapfluxo
+Group=www-data
+WorkingDirectory=/opt/zapfluxo
+EnvironmentFile=/etc/zapfluxo/zapfluxo.env
+ExecStart=/opt/zapfluxo/venv/bin/python manage.py apply_data_retention

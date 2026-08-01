@@ -1,0 +1,10 @@
+[Unit]
+Description=Apply ZapFluxo data retention daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=zapfluxo-retention.service
+
+[Install]
+WantedBy=timers.target

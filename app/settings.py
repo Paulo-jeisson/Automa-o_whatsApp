@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+from decimal import Decimal
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -69,6 +70,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'core.middleware.SecurityHeadersMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -181,11 +184,17 @@ AI_TIMEOUT = float(os.environ.get('AI_TIMEOUT', '20'))
 AI_CONTEXT_MESSAGE_LIMIT = int(os.environ.get('AI_CONTEXT_MESSAGE_LIMIT', '12'))
 AI_CONTEXT_SUMMARY_TRIGGER = int(os.environ.get('AI_CONTEXT_SUMMARY_TRIGGER', '20'))
 AI_CONTEXT_SUMMARY_MAX_CHARS = int(os.environ.get('AI_CONTEXT_SUMMARY_MAX_CHARS', '2000'))
+AI_INPUT_COST_PER_MILLION = Decimal(os.environ.get('AI_INPUT_COST_PER_MILLION', '0'))
+AI_OUTPUT_COST_PER_MILLION = Decimal(os.environ.get('AI_OUTPUT_COST_PER_MILLION', '0'))
 
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 STRIPE_API_VERSION = os.environ.get('STRIPE_API_VERSION', '2025-06-30.basil')
 TRIAL_DAYS = int(os.environ.get('TRIAL_DAYS', '14'))
+TASK_QUEUE_EAGER = os.environ.get('TASK_QUEUE_EAGER', 'True').lower() in {'1', 'true', 'yes', 'on'}
+TASK_QUEUE_BACKOFF = int(os.environ.get('TASK_QUEUE_BACKOFF', '30'))
+TASK_QUEUE_MAX_BACKOFF = int(os.environ.get('TASK_QUEUE_MAX_BACKOFF', '3600'))
+OPERATIONAL_ALERT_WEBHOOK = os.environ.get('OPERATIONAL_ALERT_WEBHOOK', '')
 
 LOGGING = {
     'version': 1,
@@ -212,3 +221,11 @@ LOGGING = {
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+EVOLUTION_API_URL = os.environ.get('EVOLUTION_API_URL', '')
+EVOLUTION_API_KEY = os.environ.get('EVOLUTION_API_KEY', '')
+EVOLUTION_WEBHOOK_SECRET = os.environ.get('EVOLUTION_WEBHOOK_SECRET', '')
+JWT_ACCESS_SECONDS = int(os.environ.get('JWT_ACCESS_SECONDS', '900'))
+JWT_REFRESH_SECONDS = int(os.environ.get('JWT_REFRESH_SECONDS', '604800'))
+APP_VERSION = os.environ.get('APP_VERSION', 'development')
+CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zapfluxo-runtime'}}

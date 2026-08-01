@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-zapfluxo}
+      POSTGRES_USER: ${POSTGRES_USER:-zapfluxo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+    ports:
+      - "8000:8000"
+    volumes:
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+    depends_on:
+      db:
+        condition: service_healthy
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+    command: ["sh", "-c", "while true; do python manage.py process_jobs --queue whatsapp --limit 500; sleep 5; done"]
+    depends_on:
+      db:
+        condition: service_healthy
+  monitor:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+    command: ["sh", "-c", "while true; do python manage.py check_operations; sleep 60; done"]
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  postgres_data:
+  media_data:
+  static_data:

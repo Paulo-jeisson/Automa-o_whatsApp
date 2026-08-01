@@ -2,6 +2,8 @@ from django.urls import path
 
 from . import views
 from .webhook_views import whatsapp_webhook
+from .presentation import module_views
+from .presentation import security_views
 
 
 urlpatterns = [
@@ -32,7 +34,15 @@ urlpatterns = [
     path('minha-empresa/', views.minha_empresa, name='minha_empresa'),
     path('configuracoes/', views.configuracoes, name='configuracoes'),
     path('configuracoes/ia/', views.configuracao_ia, name='configuracao_ia'),
+    path('configuracoes/base-conhecimento/', views.base_conhecimento, name='base_conhecimento'),
+    path('configuracoes/base-conhecimento/<int:article_id>/excluir/', views.base_conhecimento_excluir, name='base_conhecimento_excluir'),
+    path('configuracoes/privacidade/', views.privacidade_dados, name='privacidade_dados'),
+    path('configuracoes/privacidade/<int:request_id>/aprovar/', views.privacidade_aprovar, name='privacidade_aprovar'),
+    path('configuracoes/privacidade/<int:request_id>/executar/', views.privacidade_executar, name='privacidade_executar'),
+    path('configuracoes/privacidade/<int:request_id>/exportar/', views.privacidade_exportar, name='privacidade_exportar'),
     path('configuracoes/whatsapp/conectar/', views.whatsapp_onboarding, name='whatsapp_onboarding'),
+    path('configuracoes/whatsapp/producao/', views.meta_producao, name='meta_producao'),
+    path('metricas/ia/', views.metricas_ia, name='metricas_ia'),
     path('configuracoes/whatsapp/desconectar/', views.whatsapp_desconectar, name='whatsapp_desconectar'),
     path('configuracoes/testar-whatsapp/', views.testar_integracao_whatsapp, name='testar_integracao_whatsapp'),
     path('agenda/', views.agenda, name='agenda'),
@@ -46,4 +56,30 @@ urlpatterns = [
     path('fluxo/aplicar-template/', views.aplicar_template_fluxo, name='aplicar_template_fluxo'),
     path('atendimento/<slug:public_slug>/', views.atendimento_publico, name='atendimento_publico'),
     path('webhooks/whatsapp/', whatsapp_webhook, name='whatsapp_webhook'),
+    path('whatsapp/', module_views.whatsapp_dashboard, name='whatsapp_dashboard'),
+    path('whatsapp/acao/<str:action>/', module_views.whatsapp_action, name='whatsapp_action'),
+    path('whatsapp/status/', module_views.whatsapp_status, name='whatsapp_status'),
+    path('webhooks/evolution/', module_views.evolution_webhook, name='evolution_webhook'),
+    path('health/whatsapp/', module_views.whatsapp_health, name='whatsapp_health'),
+    path('ia/', module_views.ai_dashboard, name='ai_dashboard'),
+    path('ia/gerador/', module_views.prompt_generator, name='prompt_generator'),
+    path('ia/gerador/versoes/<int:version_id>/restaurar/', module_views.prompt_restore, name='prompt_restore'),
+    path('ia/gerador/autosave/', module_views.prompt_autosave, name='prompt_autosave'),
+    path('ia/gerador/versoes/<int:version_id>/duplicar/', module_views.prompt_duplicate, name='prompt_duplicate'),
+    path('ia/gerador/diferenca/', module_views.prompt_diff, name='prompt_diff'),
+    path('ia/gerador/template/', module_views.prompt_apply_template, name='prompt_apply_template'),
+    path('agenda/feriados/novo/', module_views.holiday_create, name='holiday_create'),
+    path('conversas/', module_views.conversations_crm, name='conversations_crm'),
+    path('conversas/<int:atendimento_id>/nota/', module_views.conversation_note, name='conversation_note'),
+    path('conversas/<int:atendimento_id>/arquivo/', module_views.conversation_attachment, name='conversation_attachment'),
+    path('conversas/<int:atendimento_id>/reabrir/', module_views.conversation_reopen, name='conversation_reopen'),
+    path('conversas/<int:atendimento_id>/etiqueta/', module_views.conversation_tag, name='conversation_tag'),
+    path('dashboard/analytics/', module_views.analytics_dashboard, name='analytics_dashboard'),
+    path('dashboard/exportar/', module_views.analytics_export, name='analytics_export'),
+    path('seguranca/', security_views.security_center, name='security_center'),
+    path('seguranca/tokens/revogar/', security_views.revoke_api_tokens, name='revoke_api_tokens'),
+    path('seguranca/sessoes/revogar/', security_views.revoke_other_sessions, name='revoke_other_sessions'),
+    path('api/auth/token/', security_views.token_create, name='api_token_create'),
+    path('api/auth/refresh/', security_views.token_refresh, name='api_token_refresh'),
+    path('api/me/', security_views.api_me, name='api_me'),
 ]

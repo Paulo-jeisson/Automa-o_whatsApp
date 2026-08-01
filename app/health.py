@@ -25,3 +25,21 @@ def health(request):
         },
         status=200 if healthy else 503,
     )
+
+
+@never_cache
+@require_GET
+def live(request):
+    return JsonResponse({'status': 'ok', 'application': 'alive'})
+
+
+@never_cache
+@require_GET
+def ready(request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+            database_ok = cursor.fetchone() == (1,)
+    except Exception:
+        database_ok = False
+    return JsonResponse({'status': 'ready' if database_ok else 'unavailable', 'database': 'ok' if database_ok else 'unavailable'}, status=200 if database_ok else 503)

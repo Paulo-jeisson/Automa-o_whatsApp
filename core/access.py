@@ -59,6 +59,9 @@ class RolePermissionMiddleware:
         'finalizar_atendimento': 'attend',
         'atendimento_eventos': 'attend',
         'inbox_eventos': 'attend',
+        'security_center': 'manage_company',
+        'revoke_api_tokens': 'manage_company',
+        'revoke_other_sessions': 'manage_company',
     }
 
     def __init__(self, get_response):

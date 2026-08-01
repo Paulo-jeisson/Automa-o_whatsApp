@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import Agendamento, Atendimento, Servico
+from core.models import Agendamento, Atendimento, Servico, KnowledgeBaseArticle
 from core.services.scheduling import SchedulingService, SlotUnavailable
 
 from .exceptions import AIToolError, AIToolValidationError
@@ -74,6 +74,39 @@ TOOL_DEFINITIONS = [
             },
             'required': ['agendamento_id', 'confirmado_pelo_cliente'],
             'additionalProperties': False,
+        },
+        'strict': True,
+    },
+    {
+        'type': 'function', 'name': 'confirmar_agendamento',
+        'description': 'Confirma um agendamento pendente do cliente.',
+        'parameters': {
+            'type': 'object',
+            'properties': {'agendamento_id': {'type': 'integer'}, 'confirmado_pelo_cliente': {'type': 'boolean'}},
+            'required': ['agendamento_id', 'confirmado_pelo_cliente'], 'additionalProperties': False,
+        },
+        'strict': True,
+    },
+    {
+        'type': 'function', 'name': 'reagendar_agendamento',
+        'description': 'Reagenda após confirmação, validando novamente a disponibilidade.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'agendamento_id': {'type': 'integer'}, 'data': {'type': 'string'},
+                'hora': {'type': 'string'}, 'confirmado_pelo_cliente': {'type': 'boolean'},
+            },
+            'required': ['agendamento_id', 'data', 'hora', 'confirmado_pelo_cliente'],
+            'additionalProperties': False,
+        },
+        'strict': True,
+    },
+    {
+        'type': 'function', 'name': 'pesquisar_base_conhecimento',
+        'description': 'Pesquisa conteúdo administrado pela empresa antes de responder dúvidas específicas.',
+        'parameters': {
+            'type': 'object', 'properties': {'consulta': {'type': 'string'}},
+            'required': ['consulta'], 'additionalProperties': False,
         },
         'strict': True,
     },
@@ -222,6 +255,60 @@ class AIToolExecutor:
                 raise AIToolValidationError('Agendamentos passados não podem ser cancelados.')
             SchedulingService.cancel_appointment(appointment)
         return self._appointment_payload(appointment)
+
+    def confirmar_agendamento(self, *, agendamento_id, confirmado_pelo_cliente):
+        if confirmado_pelo_cliente is not True:
+            raise AIToolValidationError('É necessária confirmação explícita do cliente.')
+        with transaction.atomic():
+            appointment = self._customer_appointment(agendamento_id, lock=True)
+            if appointment.status != Agendamento.Status.PENDING:
+                raise AIToolValidationError('O agendamento não está pendente.')
+            appointment.status = Agendamento.Status.CONFIRMED
+            appointment.save(update_fields=['status', 'updated_at'])
+        return self._appointment_payload(appointment)
+
+    def reagendar_agendamento(self, *, agendamento_id, data, hora, confirmado_pelo_cliente):
+        if confirmado_pelo_cliente is not True:
+            raise AIToolValidationError('É necessária confirmação explícita do cliente.')
+        with transaction.atomic():
+            appointment = self._customer_appointment(agendamento_id, lock=True)
+            if appointment.status not in SchedulingService.ACTIVE_STATUSES:
+                raise AIToolValidationError('Agendamento ativo não encontrado.')
+            replacement = SchedulingService.reschedule_appointment(
+                appointment, self._date(data), self._time(hora),
+            )
+        return {'anterior': self._appointment_payload(appointment), 'novo': self._appointment_payload(replacement)}
+
+    def pesquisar_base_conhecimento(self, *, consulta):
+        from django.db.models import Q
+        terms = [term for term in str(consulta).strip().split() if len(term) >= 3][:8]
+        if not terms:
+            raise AIToolValidationError('Informe uma consulta mais específica.')
+        combined = Q()
+        for term in terms:
+            combined |= Q(title__icontains=term) | Q(content__icontains=term) | Q(keywords__icontains=term)
+        articles = KnowledgeBaseArticle.objects.filter(
+            combined, empresa=self.empresa, is_active=True,
+        )[:5]
+        return {'resultados': [
+            {'id': item.pk, 'titulo': item.title, 'categoria': item.category, 'conteudo': item.content[:2000]}
+            for item in articles
+        ]}
+
+    def _customer_appointment(self, appointment_id, *, lock=False):
+        if not self.atendimento.contato_id:
+            raise AIToolValidationError('O atendimento não possui contato vinculado.')
+        query = Agendamento.objects.filter(
+            pk=appointment_id, empresa=self.empresa, contato=self.atendimento.contato,
+        ).select_related('servico')
+        if lock:
+            query = query.select_for_update()
+        appointment = query.first()
+        if not appointment:
+            raise AIToolValidationError('Agendamento não encontrado para este cliente.')
+        if appointment.data < timezone.localdate():
+            raise AIToolValidationError('Agendamentos passados não podem ser alterados.')
+        return appointment
 
     def solicitar_atendente(self, *, motivo):
         reason = str(motivo or '').strip()[:500]

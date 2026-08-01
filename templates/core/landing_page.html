@@ -3,7 +3,6 @@
 {% block title %}ZapFluxo | Atendimento organizado pelo WhatsApp{% endblock %}
 
 {% block body %}
-<a class="btn btn-primary" href="{% url 'cadastro' %}">Criar conta</a>
 <div class="landing-page">
   <header class="landing-header">
     <div class="landing-container landing-nav">
@@ -16,7 +15,7 @@
         <a href="#segmentos">Segmentos</a>
         <a href="#planos">Planos</a>
       </nav>
-      <a class="btn btn-outline landing-login" href="{% url 'login' %}">Entrar no painel</a>
+      <div class="landing-account-actions"><a class="btn btn-primary" href="{% url 'cadastro' %}">Criar conta</a><a class="btn btn-outline landing-login" href="{% url 'login' %}">Entrar no painel</a></div>
     </div>
   </header>
 
@@ -24,8 +23,8 @@
     <section class="landing-hero">
       <div class="landing-container hero-grid">
         <div class="hero-copy">
-          <span class="landing-kicker">Atendimento simples. Negócio organizado.</span>
-          <h1>Organize seus atendimentos do WhatsApp sem trocar seu sistema atual.</h1>
+          <span class="landing-kicker hero-badge">Atendimento simples. Negócio organizado.</span>
+          <h1><span class="sr-only">Organize seus atendimentos do WhatsApp sem trocar seu sistema atual.</span><span class="line-main" aria-hidden="true">Organize seus atendimentos</span><span class="line-accent" aria-hidden="true">do WhatsApp</span><span class="line-dim" aria-hidden="true">sem trocar seu sistema atual.</span></h1>
           <p>Receba pedidos, dúvidas e contatos em um painel simples. Cada novo atendimento chega organizado e o responsável é avisado pelo WhatsApp.</p>
           <div class="hero-actions">
             {% if whatsapp_url %}
@@ -41,29 +40,26 @@
           </div>
         </div>
 
-        <div class="hero-preview" aria-label="Prévia do painel ZapFluxo">
-          <div class="preview-top">
-            <span class="preview-logo">Z</span>
-            <div><strong>Painel ZapFluxo</strong><small>Atendimentos de hoje</small></div>
-            <span class="status-badge status-new">Online</span>
+        <div class="hero-preview hero-terminal" aria-label="Prévia do atendimento ZapFluxo">
+          <div class="terminal-bar">
+            <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+            <span class="terminal-title">ZAPFLUXO // ATENDIMENTO AO VIVO</span>
           </div>
-          <div class="preview-metrics">
-            <div><small>Hoje</small><strong>12</strong></div>
-            <div><small>Novos</small><strong>4</strong></div>
-          </div>
-          <div class="preview-list">
-            <div class="preview-item">
-              <span class="client-avatar">MS</span>
-              <div><strong>Marina Souza</strong><small>Agendar atendimento</small></div>
-              <span class="preview-time">Agora</span>
+          <div class="terminal-body">
+            <div class="terminal-message bot-message">
+              <span class="terminal-avatar ai-avatar">Z</span>
+              <div><div class="terminal-bubble">Olá! Como posso ajudar você hoje?</div><small>Assistente IA · agora</small></div>
             </div>
-            <div class="preview-item">
-              <span class="client-avatar blue">RC</span>
-              <div><strong>Rafael Costa</strong><small>Consultar preço</small></div>
-              <span class="preview-time">10 min</span>
+            <div class="terminal-message user-message">
+              <span class="terminal-avatar user-avatar">MS</span>
+              <div><div class="terminal-bubble">Gostaria de agendar um atendimento.</div><small>Marina · agora</small></div>
             </div>
-            <div class="preview-notice">✓ Responsável avisado no WhatsApp</div>
+            <div class="terminal-message bot-message">
+              <span class="terminal-avatar ai-avatar">Z</span>
+              <div><div class="terminal-bubble">Perfeito. Tenho horários disponíveis ainda hoje.</div><small>Assistente IA · digitando</small></div>
+            </div>
           </div>
+          <div class="terminal-status"><span><i></i> Sistema online</span><small>3 mensagens processadas</small></div>
         </div>
       </div>
     </section>
@@ -130,35 +126,28 @@
 
     <section class="landing-section section-soft" id="planos">
       <div class="landing-container">
-        <div class="section-heading">
-          <span class="landing-kicker">Planos simples</span>
-          <h2>Escolha o plano ideal para começar</h2>
-          <p>Sem taxa de instalação e com suporte para colocar seu fluxo no ar.</p>
+        <div class="section-heading pricing-heading">
+          <span class="landing-kicker">Após o teste gratuito</span>
+          <h2 class="sr-only">Planos simples</h2>
+          <p>Escolha o plano que faz sentido para o seu negócio</p>
         </div>
-        <div class="pricing-grid">
-          <article class="landing-card pricing-card">
-            <h3>Essencial</h3>
-            <p>Para organizar o primeiro canal de atendimento.</p>
-            <div class="price"><strong>R$ 49</strong><span>/mês</span></div>
-            <ul><li>1 negócio</li><li>Painel de atendimentos</li><li>Fluxo personalizável</li><li>Aviso via WhatsApp</li></ul>
-            {% if whatsapp_url %}<a class="btn btn-outline btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Quero começar</a>{% else %}<a class="btn btn-outline btn-block" href="{% url 'login' %}">Quero começar</a>{% endif %}
+        <div class="pricing-grid pricing-grid-compact">
+          <article class="landing-card pricing-card pricing-card-compact monthly-plan">
+            <span class="plan-period">Mensal</span>
+            <div class="price compact-price"><strong><small>R$</small>147</strong></div>
+            <p class="plan-caption">por mês · renovação<br>automática</p>
+            {% if whatsapp_url %}<a class="btn btn-outline btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Assinar</a>{% else %}<a class="btn btn-outline btn-block" href="{% url 'cadastro' %}">Começar teste</a>{% endif %}
           </article>
-          <article class="landing-card pricing-card featured">
-            <span class="popular-badge">Mais escolhido</span>
-            <h3>Profissional</h3>
-            <p>Para quem recebe mais contatos e quer crescer.</p>
-            <div class="price"><strong>R$ 89</strong><span>/mês</span></div>
-            <ul><li>Tudo do Essencial</li><li>Até 3 fluxos de atendimento</li><li>Relatórios de desempenho</li><li>Suporte prioritário</li></ul>
-            {% if whatsapp_url %}<a class="btn btn-primary btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Escolher Profissional</a>{% else %}<a class="btn btn-primary btn-block" href="{% url 'login' %}">Escolher Profissional</a>{% endif %}
-          </article>
-          <article class="landing-card pricing-card">
-            <h3>Sob medida</h3>
-            <p>Para operações com necessidades específicas.</p>
-            <div class="price"><strong>Vamos conversar</strong></div>
-            <ul><li>Múltiplos negócios</li><li>Fluxos personalizados</li><li>Implantação assistida</li><li>Atendimento dedicado</li></ul>
-            {% if whatsapp_url %}<a class="btn btn-outline btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Falar com especialista</a>{% else %}<a class="btn btn-outline btn-block" href="{% url 'login' %}">Falar com especialista</a>{% endif %}
+          <article class="landing-card pricing-card pricing-card-compact annual-plan featured">
+            <span class="popular-badge">Popular</span>
+            <span class="plan-period">Anual</span>
+            <div class="price compact-price"><strong><small>R$</small>997</strong></div>
+            <p class="installment">12x de R$83,08</p>
+            <p class="plan-saving">Economize R$767 vs mensal</p>
+            {% if whatsapp_url %}<a class="btn btn-success btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Assinar</a>{% else %}<a class="btn btn-success btn-block" href="{% url 'cadastro' %}">Começar teste</a>{% endif %}
           </article>
         </div>
+        <p class="pricing-guarantee">Garantia de 7 dias · Sem fidelidade · Cancele quando quiser</p>
       </div>
     </section>
 

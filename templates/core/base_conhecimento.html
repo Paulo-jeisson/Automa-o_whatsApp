@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Base de conhecimento | ZapFluxo{% endblock %}
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">Z</span><div><strong>ZapFluxo</strong><small>Atendimento simples</small></div></div>
+    <nav class="nav-list">
+      <a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a>
+      <a class="nav-item" href="{% url 'configuracao_ia' %}">Configuração da IA</a>
+      <a class="nav-item active" href="{% url 'base_conhecimento' %}">Base de conhecimento</a>
+    </nav>
+  </aside>
+  <main class="main-area">
+    <header class="topbar"><div><span class="eyebrow">{{ empresa.nome }}</span><h1>Base de conhecimento</h1></div></header>
+    <section class="settings-layout">
+      <div class="panel settings-main">
+        {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+        <form method="post" enctype="multipart/form-data" class="company-form">{% csrf_token %}
+          {% if editing %}<input type="hidden" name="article_id" value="{{ editing.pk }}">{% endif %}
+          <div class="form-grid">
+            {% for field in form %}<div class="form-field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>{% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit">{% if editing %}Atualizar{% else %}Adicionar{% endif %} conteúdo</button>
+        </form>
+      </div>
+      <aside class="settings-summary">
+        {% for article in articles %}
+          <article class="settings-info-card">
+            <span class="eyebrow">{{ article.get_content_type_display }} // {{ article.category|default:"Geral" }}</span><strong>{{ article.title }}</strong>
+            {% if article.price %}<small>R$ {{ article.price }}</small>{% endif %}{% if article.attachment %}<a href="{{ article.attachment.url }}" target="_blank">Abrir documento</a>{% endif %}
+            <small>{{ article.content|truncatechars:140 }}</small>
+            <a href="?editar={{ article.pk }}">Editar</a>
+            <form method="post" action="{% url 'base_conhecimento_excluir' article.pk %}">{% csrf_token %}<button class="btn btn-outline" type="submit">Excluir</button></form>
+          </article>
+        {% empty %}<article class="settings-info-card"><small>Nenhum conteúdo cadastrado.</small></article>{% endfor %}
+      </aside>
+    </section>
+  </main>
+</div>
+{% endblock %}

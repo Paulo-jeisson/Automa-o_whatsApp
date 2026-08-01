@@ -22,6 +22,14 @@ from .models import (
     ReminderConfiguration,
     Subscription,
     UsageCounter,
+    AsyncJob,
+    KnowledgeBaseArticle,
+    OperationalAlert,
+    OperationalMetric,
+    AIUsageRecord,
+    DataRetentionPolicy,
+    DataSubjectRequest,
+    MetaOnboardingVerification,
 )
 
 admin.site.register(Servico)
@@ -38,6 +46,14 @@ admin.site.register(PaymentEvent)
 admin.site.register(PaymentHistory)
 admin.site.register(ReminderConfiguration)
 admin.site.register(AppointmentReminder)
+admin.site.register(KnowledgeBaseArticle)
+admin.site.register(AsyncJob)
+admin.site.register(OperationalMetric)
+admin.site.register(OperationalAlert)
+admin.site.register(AIUsageRecord)
+admin.site.register(DataRetentionPolicy)
+admin.site.register(DataSubjectRequest)
+admin.site.register(MetaOnboardingVerification)
 
 
 @admin.register(AIConfiguration)

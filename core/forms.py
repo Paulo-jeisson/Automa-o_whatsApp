@@ -7,7 +7,9 @@ from django.contrib.auth import get_user_model
 from .models import (
     Agendamento, AIConfiguration, Atendimento, BloqueioAgenda, Contato, DisponibilidadeSemanal,
     EmpresaCliente, FluxoAtendimento, Servico,
-    CompanyInvitation, CompanyMembership, ReminderConfiguration,
+    CompanyInvitation, CompanyMembership, ReminderConfiguration, KnowledgeBaseArticle,
+    DataRetentionPolicy, DataSubjectRequest,
+    MetaOnboardingVerification,
 )
 
 
@@ -82,16 +84,59 @@ class AIConfigurationForm(forms.ModelForm):
             'business_description',
             'additional_information',
             'human_handoff_rules',
+            'faq', 'policies', 'guidance', 'cancellation_rules',
+            'service_rules', 'allowed_information',
         ]
         widgets = {
             'greeting': forms.Textarea(attrs={'rows': 3}),
             'business_description': forms.Textarea(attrs={'rows': 4}),
             'additional_information': forms.Textarea(attrs={'rows': 5}),
             'human_handoff_rules': forms.Textarea(attrs={'rows': 4}),
+            'faq': forms.Textarea(attrs={'rows': 4}),
+            'policies': forms.Textarea(attrs={'rows': 4}),
+            'guidance': forms.Textarea(attrs={'rows': 4}),
+            'cancellation_rules': forms.Textarea(attrs={'rows': 4}),
+            'service_rules': forms.Textarea(attrs={'rows': 4}),
+            'allowed_information': forms.Textarea(attrs={'rows': 4}),
         }
 
     def clean_assistant_name(self):
         return self.cleaned_data['assistant_name'].strip()
+
+
+class KnowledgeBaseArticleForm(forms.ModelForm):
+    content_type = forms.ChoiceField(
+        label='Tipo', choices=KnowledgeBaseArticle.ContentType.choices, required=False,
+        initial=KnowledgeBaseArticle.ContentType.FAQ,
+    )
+    class Meta:
+        model = KnowledgeBaseArticle
+        fields = ('content_type', 'title', 'category', 'content', 'price', 'attachment', 'keywords', 'is_active')
+        widgets = {'content': forms.Textarea(attrs={'rows': 8})}
+
+    def clean_content_type(self):
+        return self.cleaned_data.get('content_type') or KnowledgeBaseArticle.ContentType.FAQ
+
+
+class DataRetentionPolicyForm(forms.ModelForm):
+    class Meta:
+        model = DataRetentionPolicy
+        fields = ('message_retention_days', 'attendance_retention_days', 'anonymize_instead_of_delete')
+
+
+class DataSubjectRequestForm(forms.ModelForm):
+    class Meta:
+        model = DataSubjectRequest
+        fields = ('request_type', 'subject_name', 'whatsapp_id', 'verification_notes')
+
+
+class MetaOnboardingVerificationForm(forms.ModelForm):
+    class Meta:
+        model = MetaOnboardingVerification
+        fields = (
+            'inbound_verified', 'outbound_verified', 'tenant_isolation_verified',
+            'templates_verified', 'permissions_verified', 'notes',
+        )
 
 
 class EmpresaClienteForm(forms.ModelForm):

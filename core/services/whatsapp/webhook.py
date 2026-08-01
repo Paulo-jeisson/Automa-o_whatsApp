@@ -10,7 +10,6 @@ from core.models import Atendimento, Contato, Mensagem, WhatsAppIntegration
 from core.services.entitlements import EntitlementService
 
 from .parser import NormalizedWebhookEvent
-from .outbound import send_automatic_reply
 
 
 logger = logging.getLogger('whatsapp.webhook')
@@ -24,6 +23,7 @@ def process_webhook_events(events):
 
 
 def process_webhook_event(event: NormalizedWebhookEvent):
+    started_at = timezone.now()
     if not event.phone_number_id:
         logger.warning('whatsapp.webhook.phone_number_id_missing event_type=%s', event.event_type)
         return None
@@ -48,7 +48,12 @@ def process_webhook_event(event: NormalizedWebhookEvent):
     if event.event_type == 'message':
         inbound_message, created = _persist_inbound_message(integration, event)
         if created:
-            send_automatic_reply(inbound_message)
+            from core.services.queue import enqueue
+            enqueue(
+                'whatsapp.automatic_reply', {'message_id': inbound_message.pk},
+                idempotency_key=f'automatic-reply:{inbound_message.external_message_id}',
+                queue='whatsapp',
+            )
         logger.info(
             'whatsapp.message.received company_id=%s phone_number_id=%s message_id=%s type=%s',
             integration.company_id,
@@ -71,6 +76,12 @@ def process_webhook_event(event: NormalizedWebhookEvent):
             integration.company_id,
             integration.phone_number_id,
         )
+    from core.services.observability import record_metric
+    record_metric(
+        'webhook.event', empresa=integration.company,
+        value=(timezone.now() - started_at).total_seconds() * 1000,
+        labels={'type': event.event_type, 'unit': 'ms'},
+    )
     return integration
 
 

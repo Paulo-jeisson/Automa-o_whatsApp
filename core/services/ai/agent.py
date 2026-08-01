@@ -11,6 +11,9 @@ from .tools import AIToolExecutor, tool_definitions
 class AIReply:
     text: str
     provider_response_id: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    tool_calls: int = 0
 
 
 class AIAgent:
@@ -43,6 +46,9 @@ class AIAgent:
         return AIReply(
             text=response.text,
             provider_response_id=response.response_id,
+            input_tokens=int(getattr(response, 'input_tokens', 0) or 0),
+            output_tokens=int(getattr(response, 'output_tokens', 0) or 0),
+            tool_calls=int(getattr(response, 'tool_calls', 0) or 0),
         )
 
     @staticmethod

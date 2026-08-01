@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from core.models import Agendamento, BloqueioAgenda, DisponibilidadeSemanal, EmpresaCliente
+from core.models import Agendamento, BloqueioAgenda, DisponibilidadeSemanal, EmpresaCliente, Holiday
 
 
 class SlotUnavailable(ValidationError):
@@ -25,6 +25,8 @@ class SchedulingService:
     @classmethod
     def get_available_slots(cls, empresa, servico, date):
         if servico.empresa_id != empresa.pk or not servico.ativo or date < timezone.localdate():
+            return []
+        if Holiday.objects.filter(empresa=empresa, date=date, blocks_schedule=True).exists():
             return []
         windows = DisponibilidadeSemanal.objects.filter(
             empresa=empresa, dia_semana=date.weekday(), ativo=True,
@@ -89,7 +91,8 @@ class SchedulingService:
     @classmethod
     def cancel_appointment(cls, appointment):
         appointment.status = Agendamento.Status.CANCELLED
-        appointment.save(update_fields=['status', 'updated_at'])
+        appointment.cancelled_at = timezone.now()
+        appointment.save(update_fields=['status', 'cancelled_at', 'updated_at'])
         return appointment
 
     @classmethod
@@ -97,7 +100,8 @@ class SchedulingService:
         with transaction.atomic():
             old_status = appointment.status
             appointment.status = Agendamento.Status.CANCELLED
-            appointment.save(update_fields=['status', 'updated_at'])
+            appointment.cancelled_at = timezone.now()
+            appointment.save(update_fields=['status', 'cancelled_at', 'updated_at'])
             try:
                 replacement = cls.create_appointment(
                     empresa=appointment.empresa, contato=appointment.contato,
@@ -105,8 +109,11 @@ class SchedulingService:
                     date=date, start_time=start_time, origem=appointment.origem,
                     observacao=appointment.observacao,
                 )
+                replacement.rescheduled_from = appointment
+                replacement.save(update_fields=['rescheduled_from', 'updated_at'])
             except Exception:
                 appointment.status = old_status
-                appointment.save(update_fields=['status', 'updated_at'])
+                appointment.cancelled_at = None
+                appointment.save(update_fields=['status', 'cancelled_at', 'updated_at'])
                 raise
             return replacement

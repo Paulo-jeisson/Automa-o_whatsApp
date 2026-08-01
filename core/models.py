@@ -391,6 +391,10 @@ class Atendimento(models.Model):
         verbose_name = 'atendimento'
         verbose_name_plural = 'atendimentos'
         ordering = ['-criado_em']
+        indexes = [
+            models.Index(fields=['empresa', 'status', '-last_message_at']),
+            models.Index(fields=['empresa', 'current_step', '-last_message_at']),
+        ]
 
     def __str__(self):
         return f'{self.nome_cliente} - {self.empresa.nome}'
@@ -588,6 +592,11 @@ class Agendamento(models.Model):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     origem = models.CharField(max_length=16, choices=Origem.choices, default=Origem.MANUAL)
     observacao = models.TextField(blank=True)
+    rescheduled_from = models.OneToOneField(
+        'self', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='rescheduled_to',
+    )
+    cancelled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -673,6 +682,12 @@ class AIConfiguration(models.Model):
         blank=True,
         default='Quando o cliente solicitar uma pessoa ou o assunto estiver fora do escopo.',
     )
+    faq = models.TextField('perguntas frequentes', blank=True)
+    policies = models.TextField('políticas', blank=True)
+    guidance = models.TextField('orientações de atendimento', blank=True)
+    cancellation_rules = models.TextField('regras de cancelamento', blank=True)
+    service_rules = models.TextField('regras de atendimento', blank=True)
+    allowed_information = models.TextField('informações permitidas', blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -816,3 +831,282 @@ class AppointmentReminder(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['appointment', 'offset_hours'], name='unique_appointment_reminder')]
+
+
+class KnowledgeBaseArticle(models.Model):
+    class ContentType(models.TextChoices):
+        FAQ = 'FAQ', 'FAQ'
+        PRODUCT = 'PRODUCT', 'Produto'
+        SERVICE = 'SERVICE', 'Serviço'
+        PRICE = 'PRICE', 'Valor'
+        DOCUMENT = 'DOCUMENT', 'Documento'
+        POLICY = 'POLICY', 'Política'
+
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='knowledge_articles')
+    content_type = models.CharField(max_length=16, choices=ContentType.choices, default=ContentType.FAQ)
+    title = models.CharField('título', max_length=180)
+    category = models.CharField('categoria', max_length=80, blank=True)
+    content = models.TextField('conteúdo')
+    keywords = models.CharField('palavras-chave', max_length=300, blank=True)
+    price = models.DecimalField('valor', max_digits=12, decimal_places=2, null=True, blank=True)
+    attachment = models.FileField('arquivo', upload_to='knowledge/%Y/%m/', blank=True)
+    is_active = models.BooleanField('ativo', default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['category', 'title']
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'title'], name='unique_knowledge_title_per_company'),
+        ]
+
+    def __str__(self):
+        return self.title
+
+
+class AsyncJob(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pendente'
+        PROCESSING = 'PROCESSING', 'Processando'
+        RETRY = 'RETRY', 'Nova tentativa'
+        COMPLETED = 'COMPLETED', 'Concluído'
+        DEAD = 'DEAD', 'Falha permanente'
+
+    queue = models.CharField(max_length=40, default='default', db_index=True)
+    task_name = models.CharField(max_length=120)
+    payload = models.JSONField(default=dict)
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    attempts = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=5)
+    available_at = models.DateTimeField(default=timezone.now, db_index=True)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['available_at', 'id']
+        indexes = [models.Index(fields=['queue', 'status', 'available_at'])]
+
+
+class OperationalMetric(models.Model):
+    name = models.CharField(max_length=100, db_index=True)
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, null=True, blank=True, related_name='operational_metrics')
+    value = models.FloatField(default=1)
+    labels = models.JSONField(default=dict, blank=True)
+    recorded_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['name', '-recorded_at'])]
+
+
+class OperationalAlert(models.Model):
+    class Severity(models.TextChoices):
+        WARNING = 'WARNING', 'Atenção'
+        CRITICAL = 'CRITICAL', 'Crítico'
+
+    fingerprint = models.CharField(max_length=180, unique=True)
+    kind = models.CharField(max_length=80, db_index=True)
+    severity = models.CharField(max_length=12, choices=Severity.choices)
+    message = models.CharField(max_length=500)
+    is_open = models.BooleanField(default=True, db_index=True)
+    occurrences = models.PositiveIntegerField(default=1)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+
+class DataRetentionPolicy(models.Model):
+    empresa = models.OneToOneField(EmpresaCliente, on_delete=models.CASCADE, related_name='retention_policy')
+    message_retention_days = models.PositiveIntegerField(default=730)
+    attendance_retention_days = models.PositiveIntegerField(default=730)
+    anonymize_instead_of_delete = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class DataSubjectRequest(models.Model):
+    class RequestType(models.TextChoices):
+        ACCESS = 'ACCESS', 'Acesso/exportação'
+        DELETION = 'DELETION', 'Exclusão'
+        CORRECTION = 'CORRECTION', 'Correção'
+
+    class Status(models.TextChoices):
+        RECEIVED = 'RECEIVED', 'Recebida'
+        VERIFYING = 'VERIFYING', 'Verificando identidade'
+        APPROVED = 'APPROVED', 'Aprovada'
+        COMPLETED = 'COMPLETED', 'Concluída'
+        REJECTED = 'REJECTED', 'Rejeitada'
+
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='data_subject_requests')
+    request_type = models.CharField(max_length=16, choices=RequestType.choices)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.RECEIVED)
+    subject_name = models.CharField(max_length=120, blank=True)
+    whatsapp_id = models.CharField(max_length=32)
+    contact = models.ForeignKey(Contato, on_delete=models.SET_NULL, null=True, blank=True, related_name='privacy_requests')
+    verification_notes = models.TextField(blank=True)
+    legal_basis_for_retention = models.TextField(blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-requested_at']
+        indexes = [models.Index(fields=['empresa', 'status', '-requested_at'])]
+
+
+class MetaOnboardingVerification(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='meta_verifications')
+    integration = models.ForeignKey(WhatsAppIntegration, on_delete=models.CASCADE, related_name='production_verifications')
+    inbound_verified = models.BooleanField(default=False)
+    outbound_verified = models.BooleanField(default=False)
+    tenant_isolation_verified = models.BooleanField(default=False)
+    templates_verified = models.BooleanField(default=False)
+    permissions_verified = models.BooleanField(default=False)
+    verified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    notes = models.TextField(blank=True)
+    verified_at = models.DateTimeField(auto_now_add=True)
+
+
+class AIUsageRecord(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='ai_usage_records')
+    atendimento = models.ForeignKey(Atendimento, on_delete=models.SET_NULL, null=True, blank=True, related_name='ai_usage_records')
+    provider_response_id = models.CharField(max_length=120, blank=True)
+    model = models.CharField(max_length=80)
+    input_tokens = models.PositiveIntegerField(default=0)
+    output_tokens = models.PositiveIntegerField(default=0)
+    tool_calls = models.PositiveIntegerField(default=0)
+    latency_ms = models.PositiveIntegerField(default=0)
+    succeeded = models.BooleanField(default=True)
+    error_type = models.CharField(max_length=80, blank=True)
+    estimated_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['empresa', '-created_at']),
+            models.Index(fields=['empresa', 'succeeded', '-created_at']),
+        ]
+
+
+class WhatsAppSession(models.Model):
+    STATE_CHOICES = [
+        ('OFFLINE', 'Offline'), ('INITIALIZING', 'Inicializando'),
+        ('WAITING_QR', 'Aguardando QR'), ('CONNECTING', 'Conectando'),
+        ('CONNECTED', 'Conectado'), ('ERROR', 'Erro'),
+        ('RECONNECTING', 'Reconectando'),
+    ]
+    empresa = models.OneToOneField(EmpresaCliente, on_delete=models.CASCADE, related_name='whatsapp_session')
+    instance_name = models.SlugField(max_length=120, unique=True)
+    state = models.CharField(max_length=20, choices=STATE_CHOICES, default='OFFLINE', db_index=True)
+    qr_code = models.TextField(blank=True)
+    phone_number = models.CharField(max_length=32, blank=True)
+    device_name = models.CharField(max_length=120, blank=True)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    last_heartbeat_at = models.DateTimeField(null=True, blank=True)
+    connected_at = models.DateTimeField(null=True, blank=True)
+    ping_ms = models.PositiveIntegerField(null=True, blank=True)
+    reconnect_attempts = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def online_seconds(self):
+        if not self.connected_at or self.state != 'CONNECTED':
+            return 0
+        return max(0, int((timezone.now() - self.connected_at).total_seconds()))
+
+
+class WhatsAppSessionEvent(models.Model):
+    session = models.ForeignKey(WhatsAppSession, on_delete=models.CASCADE, related_name='events')
+    kind = models.CharField(max_length=40, db_index=True)
+    message = models.CharField(max_length=300, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class AIPromptProfile(models.Model):
+    empresa = models.OneToOneField(EmpresaCliente, on_delete=models.CASCADE, related_name='prompt_profile')
+    generator_data = models.JSONField(default=dict, blank=True)
+    generated_prompt = models.TextField(blank=True)
+    draft_prompt = models.TextField(blank=True)
+    autosaved_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class AIPromptVersion(models.Model):
+    profile = models.ForeignKey(AIPromptProfile, on_delete=models.CASCADE, related_name='versions')
+    version = models.PositiveIntegerField()
+    content = models.TextField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-version']
+        constraints = [models.UniqueConstraint(fields=['profile', 'version'], name='unique_ai_prompt_version')]
+
+
+class AIPromptTemplate(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='prompt_templates', null=True, blank=True)
+    name = models.CharField(max_length=120)
+    content = models.TextField()
+    is_system = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_system', 'name']
+        constraints = [models.UniqueConstraint(fields=['empresa', 'name'], name='unique_prompt_template_per_company')]
+
+
+class Holiday(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='holidays')
+    date = models.DateField()
+    name = models.CharField(max_length=120)
+    blocks_schedule = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['date']
+        constraints = [models.UniqueConstraint(fields=['empresa', 'date'], name='unique_holiday_per_company')]
+
+
+class AttendanceTag(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='attendance_tags')
+    name = models.CharField(max_length=40)
+    color = models.CharField(max_length=7, default='#00e5ff')
+    attendances = models.ManyToManyField(Atendimento, related_name='tags', blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['empresa', 'name'], name='unique_attendance_tag_per_company')]
+
+
+class AttendanceNote(models.Model):
+    atendimento = models.ForeignKey(Atendimento, on_delete=models.CASCADE, related_name='internal_notes')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    text = models.TextField(max_length=2000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class AttendanceAttachment(models.Model):
+    atendimento = models.ForeignKey(Atendimento, on_delete=models.CASCADE, related_name='attachments')
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    file = models.FileField(upload_to='attendances/%Y/%m/')
+    media_type = models.CharField(max_length=20, default='document')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class APIRefreshToken(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='api_refresh_tokens')
+    jti_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField(db_index=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None and self.expires_at > timezone.now()

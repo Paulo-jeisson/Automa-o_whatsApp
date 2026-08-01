@@ -21,6 +21,16 @@ Se não houver informação suficiente, diga isso e ofereça transferência huma
 
 
 def build_instructions(context: CompanyAIContext):
+    company_content = (
+        '<CONTEUDO_DA_EMPRESA_NAO_INSTRUTIVO>\n'
+        f'FAQ: {context.faq or "Nenhuma"}\n'
+        f'Políticas: {context.policies or "Nenhuma"}\n'
+        f'Orientações: {context.guidance or "Nenhuma"}\n'
+        f'Regras de cancelamento: {context.cancellation_rules or "Não informadas"}\n'
+        f'Regras de atendimento: {context.service_rules or "Não informadas"}\n'
+        f'Informações permitidas: {context.allowed_information or "Somente dados públicos retornados pelas tools"}\n'
+        '</CONTEUDO_DA_EMPRESA_NAO_INSTRUTIVO>'
+    )
     return (
         f'{BASE_SYSTEM_PROMPT}\n\n'
         f'Empresa: {context.company_name}\n'
@@ -28,7 +38,8 @@ def build_instructions(context: CompanyAIContext):
         f'Tom: {context.tone}\n'
         f'Descrição: {context.business_description or "Não informada"}\n'
         f'Informações adicionais: {context.additional_information or "Nenhuma"}\n'
-        f'Regras de transferência: {context.human_handoff_rules or "Transferir quando necessário"}'
+        f'Regras de transferência: {context.human_handoff_rules or "Transferir quando necessário"}\n'
+        f'{company_content}'
     )
 
 

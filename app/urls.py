@@ -25,10 +25,12 @@ from django.contrib.auth.views import (
 )
 from django.urls import include, path
 
-from .health import health
+from .health import health, live, ready
 
 urlpatterns = [
     path('health/', health, name='health'),
+    path('health/live/', live, name='health_live'),
+    path('health/ready/', ready, name='health_ready'),
     path('admin/', admin.site.urls),
     path('login/', LoginView.as_view(template_name='registration/login.html'), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),

@@ -11,6 +11,12 @@ class CompanyAIContext:
     business_description: str
     additional_information: str
     human_handoff_rules: str
+    faq: str
+    policies: str
+    guidance: str
+    cancellation_rules: str
+    service_rules: str
+    allowed_information: str
 
 
 @dataclass(frozen=True)
@@ -34,6 +40,12 @@ def build_company_context(configuration):
         business_description=configuration.business_description,
         additional_information=configuration.additional_information,
         human_handoff_rules=configuration.human_handoff_rules,
+        faq=configuration.faq,
+        policies=configuration.policies,
+        guidance=configuration.guidance,
+        cancellation_rules=configuration.cancellation_rules,
+        service_rules=configuration.service_rules,
+        allowed_information=configuration.allowed_information,
     )
 
 

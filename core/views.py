@@ -32,6 +32,10 @@ from .forms import (
     ServicoForm,
     RegistrationForm,
     ReminderConfigurationForm,
+    KnowledgeBaseArticleForm,
+    DataRetentionPolicyForm,
+    DataSubjectRequestForm,
+    MetaOnboardingVerificationForm,
 )
 from .models import (
     Agendamento,
@@ -53,6 +57,10 @@ from .models import (
     Plan,
     ReminderConfiguration,
     Subscription,
+    KnowledgeBaseArticle,
+    DataRetentionPolicy,
+    DataSubjectRequest,
+    MetaOnboardingVerification,
 )
 from .services.scheduling import SchedulingService, SlotUnavailable
 from .services.whatsapp.embedded_signup import EmbeddedSignupService
@@ -419,6 +427,114 @@ def configuracao_ia(request):
 
 
 @login_required
+def base_conhecimento(request):
+    empresa = _empresa_do_usuario(request)
+    editing = None
+    article_id = request.GET.get('editar')
+    if article_id:
+        editing = get_object_or_404(KnowledgeBaseArticle, pk=article_id, empresa=empresa)
+    if request.method == 'POST':
+        target_id = request.POST.get('article_id')
+        target = get_object_or_404(KnowledgeBaseArticle, pk=target_id, empresa=empresa) if target_id else None
+        form = KnowledgeBaseArticleForm(request.POST, request.FILES, instance=target)
+        if form.is_valid():
+            article = form.save(commit=False)
+            article.empresa = empresa
+            article.save()
+            record_audit(request, 'knowledge.updated', empresa=empresa, target=article)
+            messages.success(request, 'Conteúdo salvo na base de conhecimento.')
+            return redirect('base_conhecimento')
+    else:
+        form = KnowledgeBaseArticleForm(instance=editing)
+    return render(request, 'core/base_conhecimento.html', {
+        'empresa': empresa, 'form': form, 'editing': editing,
+        'articles': KnowledgeBaseArticle.objects.filter(empresa=empresa),
+    })
+
+
+@login_required
+@require_POST
+def base_conhecimento_excluir(request, article_id):
+    empresa = _empresa_do_usuario(request)
+    article = get_object_or_404(KnowledgeBaseArticle, pk=article_id, empresa=empresa)
+    record_audit(request, 'knowledge.deleted', empresa=empresa, target=article)
+    article.delete()
+    messages.success(request, 'Conteúdo removido.')
+    return redirect('base_conhecimento')
+
+
+@login_required
+def privacidade_dados(request):
+    empresa = _empresa_do_usuario(request)
+    policy, _ = DataRetentionPolicy.objects.get_or_create(empresa=empresa)
+    request_form = DataSubjectRequestForm(prefix='subject')
+    policy_form = DataRetentionPolicyForm(instance=policy, prefix='policy')
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'policy':
+            policy_form = DataRetentionPolicyForm(request.POST, instance=policy, prefix='policy')
+            if policy_form.is_valid():
+                policy_form.save()
+                record_audit(request, 'privacy.retention_updated', empresa=empresa, target=policy)
+                messages.success(request, 'Política de retenção atualizada.')
+                return redirect('privacidade_dados')
+        elif action == 'request':
+            request_form = DataSubjectRequestForm(request.POST, prefix='subject')
+            if request_form.is_valid():
+                privacy_request = request_form.save(commit=False)
+                privacy_request.empresa = empresa
+                privacy_request.created_by = request.user
+                privacy_request.contact = empresa.contatos.filter(
+                    whatsapp_id=privacy_request.whatsapp_id,
+                ).first()
+                privacy_request.save()
+                record_audit(request, 'privacy.request_created', empresa=empresa, target=privacy_request)
+                messages.success(request, 'Solicitação registrada.')
+                return redirect('privacidade_dados')
+    return render(request, 'core/privacidade_dados.html', {
+        'empresa': empresa, 'policy_form': policy_form, 'request_form': request_form,
+        'privacy_requests': DataSubjectRequest.objects.filter(empresa=empresa),
+    })
+
+
+@login_required
+@require_POST
+def privacidade_aprovar(request, request_id):
+    empresa = _empresa_do_usuario(request)
+    privacy_request = get_object_or_404(DataSubjectRequest, pk=request_id, empresa=empresa)
+    privacy_request.status = DataSubjectRequest.Status.APPROVED
+    privacy_request.verified_at = timezone.now()
+    privacy_request.save(update_fields=['status', 'verified_at'])
+    record_audit(request, 'privacy.request_approved', empresa=empresa, target=privacy_request)
+    return redirect('privacidade_dados')
+
+
+@login_required
+@require_POST
+def privacidade_executar(request, request_id):
+    from .services.privacy import PrivacyService
+    empresa = _empresa_do_usuario(request)
+    privacy_request = get_object_or_404(DataSubjectRequest, pk=request_id, empresa=empresa)
+    PrivacyService.execute_deletion(privacy_request)
+    record_audit(request, 'privacy.deletion_completed', empresa=empresa, target=privacy_request)
+    messages.success(request, 'Anonimização concluída e auditada.')
+    return redirect('privacidade_dados')
+
+
+@login_required
+def privacidade_exportar(request, request_id):
+    from django.http import HttpResponse
+    from .services.privacy import PrivacyService
+    empresa = _empresa_do_usuario(request)
+    privacy_request = get_object_or_404(DataSubjectRequest, pk=request_id, empresa=empresa)
+    payload = PrivacyService.serialize_export(PrivacyService.export_subject_data(privacy_request))
+    response = HttpResponse(payload, content_type='application/json')
+    response['Content-Disposition'] = f'attachment; filename="dados-titular-{privacy_request.pk}.json"'
+    record_audit(request, 'privacy.data_exported', empresa=empresa, target=privacy_request)
+    return response
+
+
+@login_required
 def whatsapp_onboarding(request):
     empresa = _empresa_do_usuario(request)
     integration = getattr(empresa, 'whatsapp_integration', None)
@@ -473,6 +589,41 @@ def whatsapp_desconectar(request):
         record_audit(request, 'whatsapp.disconnected', empresa=empresa, target=integration)
         messages.success(request, 'WhatsApp desconectado desta empresa.')
     return redirect('configuracoes')
+
+
+@login_required
+def meta_producao(request):
+    from .services.meta_readiness import meta_production_readiness
+    empresa = _empresa_do_usuario(request)
+    integration = getattr(empresa, 'whatsapp_integration', None)
+    form = MetaOnboardingVerificationForm()
+    if request.method == 'POST':
+        if not integration:
+            messages.error(request, 'Conecte o WhatsApp antes de registrar o teste real.')
+            return redirect('meta_producao')
+        form = MetaOnboardingVerificationForm(request.POST)
+        if form.is_valid():
+            verification = form.save(commit=False)
+            verification.empresa = empresa
+            verification.integration = integration
+            verification.verified_by = request.user
+            verification.save()
+            record_audit(request, 'meta.production_verified', empresa=empresa, target=verification)
+            messages.success(request, 'Verificação real registrada e auditada.')
+            return redirect('meta_producao')
+    return render(request, 'core/meta_producao.html', {
+        'empresa': empresa, 'form': form,
+        'report': meta_production_readiness(empresa),
+    })
+
+
+@login_required
+def metricas_ia(request):
+    from .services.analytics import company_metrics
+    empresa = _empresa_do_usuario(request)
+    return render(request, 'core/metricas_ia.html', {
+        'empresa': empresa, 'metrics': company_metrics(empresa),
+    })
 
 
 @login_required
@@ -849,9 +1000,11 @@ def agendamento_status(request, agendamento_id):
     empresa = _empresa_do_usuario(request)
     appointment = get_object_or_404(Agendamento, pk=agendamento_id, empresa=empresa)
     status = request.POST.get('status')
-    if status in (Agendamento.Status.CANCELLED, Agendamento.Status.COMPLETED):
+    if status in Agendamento.Status.values:
         appointment.status = status
-        appointment.save(update_fields=['status', 'updated_at'])
+        if status == Agendamento.Status.CANCELLED:
+            appointment.cancelled_at = timezone.now()
+        appointment.save(update_fields=['status', 'cancelled_at', 'updated_at'])
         messages.success(request, 'Agendamento atualizado.')
     return redirect('agendamento_detalhe', agendamento_id=appointment.pk)
 

@@ -1,0 +1,29 @@
+# Filas e observabilidade
+
+Em produção, configure `TASK_QUEUE_EAGER=False`. O webhook salva a mensagem e
+cria um `AsyncJob` idempotente; o worker executa respostas automáticas fora da
+requisição. Falhas usam backoff exponencial e, após o limite, ficam com status
+`DEAD` para inspeção.
+
+Instale e ative os timers:
+
+```sh
+sudo systemctl enable --now zapfluxo-worker.timer
+sudo systemctl enable --now zapfluxo-monitor.timer
+```
+
+Comandos manuais:
+
+```sh
+python manage.py process_jobs --queue whatsapp --limit 500
+python manage.py check_operations
+```
+
+O monitor registra alertas persistentes para banco indisponível, fila atrasada,
+dead-letter, rejeições consecutivas da Meta e falhas consecutivas de IA. Defina
+`OPERATIONAL_ALERT_WEBHOOK` para entregar JSON a Slack, Teams ou ao serviço de
+plantão; sem ele os alertas continuam no banco e nos logs.
+
+As métricas operacionais registram eventos/latência do webhook e falhas de IA
+com associação opcional à empresa. Retenção e agregação devem ser configuradas
+de acordo com o volume do ambiente.
