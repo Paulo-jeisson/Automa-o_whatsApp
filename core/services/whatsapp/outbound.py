@@ -6,7 +6,10 @@ from django.db import IntegrityError, transaction
 
 from core.domain.exceptions import ProviderUnavailable
 from core.infrastructure.evolution import EvolutionProvider
-from core.models import FluxoAtendimento, Mensagem, WhatsAppSession, IgnoredPhoneNumber
+from core.models import (
+    AIConfiguration, AIPromptProfile, AsyncJob, FluxoAtendimento, Mensagem,
+    WhatsAppSession, IgnoredPhoneNumber,
+)
 from core.services.ai.conversation import AIConversationService
 
 from .exceptions import WhatsAppAPIError, WhatsAppProviderError
@@ -15,18 +18,122 @@ from .flow_engine import FlowEngine
 
 logger = logging.getLogger('whatsapp.outbound')
 
+LEGACY_TECHNICAL_HANDOFF_REASONS = {
+    'Falha no atendimento automático.',
+    'Falha inesperada no atendimento automático.',
+}
+
+
+def normalize_legacy_technical_handoff(inbound_message):
+    """Safely restore only handoffs created by the old immediate-failure policy."""
+    atendimento = inbound_message.atendimento
+    handoff_type = (atendimento.conversation_state or {}).get('handoff_type')
+    technical_handoff = (
+        atendimento.handoff_reason in LEGACY_TECHNICAL_HANDOFF_REASONS
+        or handoff_type in {'AI_TEMPORARY_FAILURE', 'AI_PERMANENT_FAILURE'}
+    )
+    if (
+        atendimento.current_step != atendimento.Step.WAITING_HUMAN
+        or atendimento.assigned_to_id
+        or not technical_handoff
+    ):
+        return atendimento
+    with transaction.atomic():
+        locked = type(atendimento).objects.select_for_update().get(
+            pk=atendimento.pk, empresa_id=inbound_message.empresa_id,
+        )
+        locked_handoff_type = (locked.conversation_state or {}).get('handoff_type')
+        locked_technical_handoff = (
+            locked.handoff_reason in LEGACY_TECHNICAL_HANDOFF_REASONS
+            or locked_handoff_type in {'AI_TEMPORARY_FAILURE', 'AI_PERMANENT_FAILURE'}
+        )
+        if (
+            locked.current_step != locked.Step.WAITING_HUMAN
+            or locked.assigned_to_id
+            or not locked_technical_handoff
+        ):
+            return locked
+        state = dict(locked.conversation_state or {})
+        state.pop('handoff_reason', None)
+        state.pop('handoff_type', None)
+        state.pop('last_ai_failure_type', None)
+        locked.current_step = locked.Step.MENU
+        locked.automation_enabled = True
+        locked.handoff_reason = ''
+        locked.conversation_state = state
+        locked.save(update_fields=[
+            'current_step', 'automation_enabled', 'handoff_reason', 'conversation_state',
+        ])
+    logger.info(
+        'whatsapp.auto_reply.legacy_technical_handoff_normalized company_id=%s attendance_id=%s',
+        inbound_message.empresa_id, atendimento.pk,
+    )
+    return locked
+
+
+def automatic_reply_ineligibility(inbound_message):
+    """Return the precise safety rule preventing an automatic reply."""
+    atendimento = inbound_message.atendimento
+    empresa = inbound_message.empresa
+
+    if inbound_message.direcao != Mensagem.DIRECAO_ENTRADA:
+        return 'message_from_me'
+    if atendimento.empresa_id != inbound_message.empresa_id:
+        return 'company_mismatch'
+    if not empresa.ativa:
+        return 'company_inactive'
+    if atendimento.status == atendimento.STATUS_FINALIZADO or atendimento.current_step == atendimento.Step.FINISHED:
+        return 'attendance_closed'
+    if atendimento.current_step in {atendimento.Step.WAITING_HUMAN, atendimento.Step.HUMAN} or atendimento.assigned_to_id:
+        return 'human_mode'
+    if not atendimento.automation_enabled:
+        return 'automation_disabled'
+
+    sender = re.sub(r'\D', '', atendimento.contato.whatsapp_id if atendimento.contato else '')
+    if sender and IgnoredPhoneNumber.objects.filter(
+        empresa_id=inbound_message.empresa_id, phone_number=sender,
+    ).exists():
+        return 'blocked_number'
+
+    if AsyncJob.objects.filter(
+        idempotency_key=f'automatic-reply:{inbound_message.external_message_id}',
+        status=AsyncJob.Status.COMPLETED,
+    ).exists():
+        return 'duplicate'
+    if not WhatsAppSession.objects.filter(
+        empresa_id=inbound_message.empresa_id, state='CONNECTED',
+    ).exists():
+        return 'whatsapp_session_disconnected'
+
+    try:
+        profile = AIPromptProfile.objects.get(empresa_id=inbound_message.empresa_id)
+    except AIPromptProfile.DoesNotExist:
+        return 'no_active_prompt'
+    if not profile.generated_prompt.strip():
+        return 'no_active_prompt'
+    try:
+        configuration = AIConfiguration.objects.get(empresa_id=inbound_message.empresa_id)
+    except AIConfiguration.DoesNotExist:
+        return 'ai_disabled'
+    if not configuration.enabled:
+        return 'ai_disabled'
+    if AIConversationService.is_enabled(atendimento) is None:
+        return 'ai_unavailable'
+    return None
+
 
 def send_text_for_attendance(atendimento, text):
     contato = atendimento.contato
     if contato is None or contato.empresa_id != atendimento.empresa_id:
         raise WhatsAppProviderError('O atendimento não possui um contato válido.')
 
-    session = WhatsAppSession.objects.filter(
-        empresa_id=atendimento.empresa_id,
-        empresa__ativa=True,
-        state='CONNECTED',
-    ).first()
-    if session is None:
+    try:
+        session = WhatsAppSession.objects.get(
+            empresa_id=atendimento.empresa_id,
+            empresa__ativa=True,
+            state='CONNECTED',
+        )
+    except WhatsAppSession.DoesNotExist:
         raise WhatsAppProviderError('A empresa não possui sessão Evolution conectada.')
 
     logger.info(
@@ -77,25 +184,16 @@ def send_text_for_attendance(atendimento, text):
 
 
 def send_automatic_reply(inbound_message):
-    atendimento = inbound_message.atendimento
-    if (
-        inbound_message.direcao != Mensagem.DIRECAO_ENTRADA
-        or not atendimento.automation_enabled
-    ):
+    atendimento = normalize_legacy_technical_handoff(inbound_message)
+    inbound_message.atendimento = atendimento
+    reason = automatic_reply_ineligibility(inbound_message)
+    if reason:
         logger.info(
-            'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s reason=not_eligible',
+            'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s message_id=%s reason=%s',
             inbound_message.empresa_id,
             atendimento.pk,
-        )
-        return None
-
-    sender = re.sub(r'\D', '', atendimento.contato.whatsapp_id if atendimento.contato else '')
-    if sender and IgnoredPhoneNumber.objects.filter(
-        empresa_id=inbound_message.empresa_id, phone_number=sender,
-    ).exists():
-        logger.info(
-            'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s reason=pass_number',
-            inbound_message.empresa_id, atendimento.pk,
+            inbound_message.external_message_id,
+            reason,
         )
         return None
 
@@ -116,8 +214,9 @@ def send_automatic_reply(inbound_message):
             inbound_message.empresa_id, atendimento.pk, inbound_message.tipo,
         )
     if response_text is None:
-        fluxo = FluxoAtendimento.objects.filter(empresa_id=inbound_message.empresa_id).first()
-        if fluxo is None:
+        try:
+            fluxo = FluxoAtendimento.objects.get(empresa_id=inbound_message.empresa_id)
+        except FluxoAtendimento.DoesNotExist:
             logger.info(
                 'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s reason=no_flow',
                 inbound_message.empresa_id,
@@ -139,7 +238,7 @@ def send_automatic_reply(inbound_message):
                 or locked.assigned_to_id
             ):
                 logger.info(
-                    'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s reason=human_state',
+                    'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s reason=human_mode',
                     inbound_message.empresa_id, atendimento.pk,
                 )
                 return None

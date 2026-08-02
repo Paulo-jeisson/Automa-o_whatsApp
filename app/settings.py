@@ -24,12 +24,19 @@ def load_local_env(path):
     """Carrega .env local sem substituir variáveis definidas pelo ambiente."""
     if not path.exists():
         return
+    values = {}
     for raw_line in path.read_text(encoding='utf-8').splitlines():
         line = raw_line.strip()
         if not line or line.startswith('#') or '=' not in line:
             continue
         key, value = line.split('=', 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    override = values.get('LOCAL_ENV_OVERRIDE', '').lower() in {'1', 'true', 'yes', 'on'}
+    for key, value in values.items():
+        if override:
+            os.environ[key] = value
+        else:
+            os.environ.setdefault(key, value)
 
 
 def env_list(name, default=''):
@@ -110,6 +117,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': os.environ.get('SQLITE_NAME', BASE_DIR / 'db.sqlite3'),
+        'OPTIONS': {'timeout': 20},
     }
 }
 

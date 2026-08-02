@@ -10,6 +10,14 @@ class AIProviderError(AIServiceError):
     """O provedor de IA não respondeu de forma utilizável."""
 
 
+class AITemporaryError(AIProviderError):
+    """Falha recuperável que deve seguir a política de retry do worker."""
+
+
+class AIPermanentError(AIProviderError):
+    """Falha não recuperável que ainda respeita o limite uniforme do worker."""
+
+
 class AIToolError(AIServiceError):
     """Uma operação segura solicitada pela IA não pôde ser executada."""
 

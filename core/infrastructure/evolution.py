@@ -31,6 +31,15 @@ class EvolutionSendResult:
     message_id: str
 
 
+class EvolutionRequestError(ProviderUnavailable):
+    """Evolution failure with safe HTTP context for service orchestration."""
+
+    def __init__(self, message, *, status_code=None, path=''):
+        super().__init__(message)
+        self.status_code = status_code
+        self.path = path
+
+
 class EvolutionProvider:
     """Único ponto de comunicação HTTP com a Evolution API v2."""
 
@@ -75,6 +84,7 @@ class EvolutionProvider:
             raise ProviderUnavailable('Evolution API temporariamente indisponível.')
         body = json.dumps(payload).encode('utf-8') if payload is not None else None
         last_error = None
+        status_code = None
         for attempt in range(self.max_attempts):
             request = Request(
                 f'{self.base_url}{path}', data=body, method=method,
@@ -92,6 +102,7 @@ class EvolutionProvider:
                 return result
             except HTTPError as exc:
                 last_error = exc
+                status_code = exc.code
                 if exc.code < 500 and exc.code != 429:
                     break
             except (URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
@@ -99,8 +110,13 @@ class EvolutionProvider:
             if attempt + 1 < self.max_attempts:
                 time.sleep(0.2 * (2 ** attempt))
         self._record_failure()
-        logger.warning('evolution.request.failed path=%s type=%s', path, type(last_error).__name__)
-        raise ProviderUnavailable('Falha de comunicação com Evolution API.') from last_error
+        logger.warning(
+            'evolution.request.failed path=%s method=%s status_code=%s type=%s',
+            path, method, status_code, type(last_error).__name__,
+        )
+        raise EvolutionRequestError(
+            'Falha de comunicação com Evolution API.', status_code=status_code, path=path,
+        ) from last_error
 
     @staticmethod
     def _snapshot(data, fallback=SessionState.OFFLINE):
@@ -117,25 +133,34 @@ class EvolutionProvider:
             ping_ms=data.get('_ping_ms'),
         )
 
-    def create(self, instance_name):
+    @staticmethod
+    def _webhook_config():
         if not settings.EVOLUTION_WEBHOOK_SECRET:
             raise ProviderUnavailable('EVOLUTION_WEBHOOK_SECRET não configurado.')
         webhook_url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/webhooks/evolution/"
+        return {
+            'enabled': True,
+            'url': webhook_url,
+            'webhook_by_events': False,
+            'webhook_base64': False,
+            'headers': {'x-zapfluxo-secret': settings.EVOLUTION_WEBHOOK_SECRET},
+            'events': [
+                'QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT',
+                'MESSAGES_UPDATE', 'SEND_MESSAGE',
+            ],
+        }
+
+    def create(self, instance_name):
         return self._snapshot(self._request('POST', '/instance/create', {
             'instanceName': instance_name, 'qrcode': True,
             'integration': 'WHATSAPP-BAILEYS',
-            'webhook': {
-                'enabled': True,
-                'url': webhook_url,
-                'webhook_by_events': False,
-                'webhook_base64': False,
-                'headers': {'x-zapfluxo-secret': settings.EVOLUTION_WEBHOOK_SECRET},
-                'events': [
-                    'QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT',
-                    'MESSAGES_UPDATE', 'SEND_MESSAGE',
-                ],
-            },
+            'webhook': self._webhook_config(),
         }), SessionState.INITIALIZING)
+
+    def configure_webhook(self, instance_name):
+        self._request('POST', f'/webhook/set/{instance_name}', {
+            'webhook': self._webhook_config(),
+        })
 
     def status(self, instance_name):
         return self._snapshot(self._request('GET', f'/instance/connectionState/{instance_name}'))

@@ -1,15 +1,21 @@
 import hashlib
+import logging
+import threading
 from datetime import timedelta
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, transaction
 from django.http import JsonResponse
 from django.utils import timezone
 
 from .models import RateLimitBucket
 from .security import client_ip
 
+logger = logging.getLogger('security.rate_limit')
+
 
 class RateLimitMiddleware:
+    _fallback_lock = threading.Lock()
+    _fallback_buckets = {}
     POLICIES = (
         ('login', lambda r: r.path == '/login/' and r.method == 'POST', 10, 300),
         ('api_token', lambda r: r.path.startswith('/api/auth/') and r.method == 'POST', 20, 300),
@@ -76,7 +82,34 @@ class RateLimitMiddleware:
             except IntegrityError:
                 if attempt:
                     return True
+            except OperationalError as error:
+                if 'locked' not in str(error).lower():
+                    raise
+                logger.warning(
+                    'rate_limit.database_locked policy=%s fallback=memory', name,
+                )
+                return RateLimitMiddleware._fallback_exceeded(
+                    key=key, limit=limit, seconds=seconds, now=now,
+                )
         return True
+
+    @classmethod
+    def _fallback_exceeded(cls, *, key, limit, seconds, now):
+        with cls._fallback_lock:
+            window_started_at, count = cls._fallback_buckets.get(key, (now, 0))
+            if window_started_at <= now - timedelta(seconds=seconds):
+                window_started_at, count = now, 0
+            count += 1
+            cls._fallback_buckets[key] = (window_started_at, count)
+            # Remove janelas expiradas para o fallback não crescer indefinidamente.
+            if len(cls._fallback_buckets) > 2048:
+                cutoff = now - timedelta(seconds=max(seconds, 300))
+                cls._fallback_buckets = {
+                    item_key: value
+                    for item_key, value in cls._fallback_buckets.items()
+                    if value[0] > cutoff
+                }
+            return count > limit
 
 
 class SecurityHeadersMiddleware:

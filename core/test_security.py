@@ -1,12 +1,20 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.core import mail
-from django.test import TestCase, override_settings
+from django.db import OperationalError
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from .models import Atendimento, AuditEvent, EmpresaCliente, RateLimitBucket
+from .middleware import RateLimitMiddleware
 
 
 class RateLimitTests(TestCase):
+    def setUp(self):
+        RateLimitMiddleware._fallback_buckets = {}
+
     def test_login_is_rate_limited_by_ip(self):
         for _ in range(10):
             response = self.client.post(
@@ -42,6 +50,16 @@ class RateLimitTests(TestCase):
 
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response.json()['detail'], 'Muitas requisições.')
+
+    @patch('core.middleware.RateLimitBucket.objects.select_for_update')
+    def test_sqlite_lock_uses_bounded_memory_fallback(self, select_for_update_mock):
+        select_for_update_mock.side_effect = OperationalError('database is locked')
+        request = RequestFactory().post('/webhooks/evolution/', REMOTE_ADDR='198.51.100.30')
+        request.user = AnonymousUser()
+
+        self.assertFalse(RateLimitMiddleware._exceeded(request, 'webhook', 2, 60))
+        self.assertFalse(RateLimitMiddleware._exceeded(request, 'webhook', 2, 60))
+        self.assertTrue(RateLimitMiddleware._exceeded(request, 'webhook', 2, 60))
 
 
 class PasswordResetTests(TestCase):

@@ -8,6 +8,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .models import (
+    AIConfiguration,
+    AIPromptProfile,
     Atendimento,
     Contato,
     EmpresaCliente,
@@ -325,8 +327,15 @@ class WhatsAppWebhookTests(TestCase):
 
     @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
     @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
-    def test_duplicate_inbound_triggers_only_one_auto_reply(self, send_mock, _read_mock):
+    @patch('core.services.whatsapp.outbound.AIConversationService.reply', return_value=None)
+    @override_settings(AI_ENABLED=True, OPENAI_API_KEY='test-only')
+    def test_duplicate_inbound_triggers_only_one_auto_reply(self, _reply_mock, send_mock, _read_mock):
         company, _integration = self.create_integration()
+        AIConfiguration.objects.create(empresa=company, enabled=True)
+        AIPromptProfile.objects.create(
+            empresa=company, generated_prompt='# Prompt ativo para testes',
+            response_delay_seconds=0,
+        )
         FluxoAtendimento.objects.create(
             empresa=company,
             saudacao='Olá!',

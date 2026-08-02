@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from django.conf import settings
 from openai import APIConnectionError, APITimeoutError, OpenAI, OpenAIError
 
-from .exceptions import AIConfigurationError, AIProviderError
+from .exceptions import AIConfigurationError, AIPermanentError, AIProviderError, AITemporaryError
 
 
 logger = logging.getLogger('ai.provider')
@@ -80,14 +80,24 @@ class OpenAIClient:
                 total_output_tokens += response_output
         except (APITimeoutError, APIConnectionError) as error:
             logger.warning('ai.provider.unavailable type=%s', type(error).__name__)
-            raise AIProviderError('O serviço de IA está temporariamente indisponível.') from error
+            raise AITemporaryError('O serviço de IA está temporariamente indisponível.') from error
         except OpenAIError as error:
-            logger.warning('ai.provider.rejected type=%s', type(error).__name__)
-            raise AIProviderError('O provedor de IA não aceitou a solicitação.') from error
+            status_code = getattr(error, 'status_code', None)
+            body = getattr(error, 'body', None) or {}
+            details = body.get('error', body) if isinstance(body, dict) else {}
+            logger.warning(
+                'ai.provider.rejected type=%s status_code=%s error_code=%s error_param=%s',
+                type(error).__name__, status_code,
+                details.get('code', '') if isinstance(details, dict) else '',
+                details.get('param', '') if isinstance(details, dict) else '',
+            )
+            if status_code in {400, 401, 403, 404, 422}:
+                raise AIPermanentError('O provedor de IA rejeitou permanentemente a solicitação.') from error
+            raise AITemporaryError('O provedor de IA está temporariamente indisponível.') from error
 
         text = str(getattr(response, 'output_text', '') or '').strip()
         if not text:
-            raise AIProviderError('O provedor de IA retornou uma resposta vazia.')
+            raise AITemporaryError('O provedor de IA retornou uma resposta vazia.')
         return AIClientResponse(
             text=text,
             response_id=str(getattr(response, 'id', '') or ''),

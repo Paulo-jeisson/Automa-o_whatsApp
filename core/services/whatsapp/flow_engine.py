@@ -80,9 +80,16 @@ class FlowEngine:
         if action == cls.ACTION_LOOKUP:
             return cls._lookup(atendimento, fluxo)
         if action == cls.ACTION_HUMAN:
+            state = dict(atendimento.conversation_state or {})
+            state['handoff_type'] = 'HANDOFF_BUSINESS_RULE'
+            state['handoff_reason'] = 'Regra explícita do fluxo solicitou atendimento humano.'
             atendimento.current_step = Atendimento.Step.WAITING_HUMAN
             atendimento.automation_enabled = False
-            atendimento.save(update_fields=['current_step', 'automation_enabled'])
+            atendimento.handoff_reason = state['handoff_reason']
+            atendimento.conversation_state = state
+            atendimento.save(update_fields=[
+                'current_step', 'automation_enabled', 'handoff_reason', 'conversation_state',
+            ])
             return 'Seu atendimento foi encaminhado para nossa equipe.'
         return cls._menu_text(fluxo, True)
 

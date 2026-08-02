@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from core.models import (
     AIConfiguration,
+    AIPromptProfile,
     Atendimento,
     AuditEvent,
     Contato,
@@ -16,6 +17,7 @@ from core.models import (
     WhatsAppIntegration,
 )
 from core.services.ai.exceptions import AIProviderError
+from core.services.ai.exceptions import AITemporaryError
 from core.services.ai.guardrails import (
     FALLBACK_MESSAGE,
     OUT_OF_SCOPE_MESSAGE,
@@ -35,6 +37,10 @@ class AIWhatsAppConversationTests(TestCase):
         self.user = get_user_model().objects.create_user('ai-webhook')
         self.company = EmpresaCliente.objects.create(usuario=self.user, nome='Clínica IA')
         AIConfiguration.objects.create(empresa=self.company, enabled=True)
+        AIPromptProfile.objects.create(
+            empresa=self.company, generated_prompt='# Prompt ativo para testes',
+            response_delay_seconds=0,
+        )
         WhatsAppIntegration.objects.create(
             company=self.company,
             phone_number_id='phone-ai',
@@ -80,19 +86,20 @@ class AIWhatsAppConversationTests(TestCase):
     @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
     @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     @patch('core.services.ai.conversation.AIAgent.respond')
-    def test_provider_failure_sends_safe_fallback_and_hands_off(
+    def test_provider_failure_stays_automatic_for_worker_retry(
         self, respond_mock, send_mock, _read_mock,
     ):
         respond_mock.side_effect = AIProviderError('provider unavailable')
         send_mock.return_value = SendTextResult('out-fallback-1')
 
-        outbound = send_automatic_reply(self.inbound)
+        with self.assertRaises(AITemporaryError):
+            send_automatic_reply(self.inbound)
 
-        self.assertIsNone(outbound)
         self.attendance.refresh_from_db()
-        self.assertEqual(self.attendance.current_step, Atendimento.Step.WAITING_HUMAN)
-        self.assertFalse(self.attendance.automation_enabled)
-        self.assertTrue(self.attendance.handoff_reason)
+        self.assertEqual(self.attendance.current_step, Atendimento.Step.MENU)
+        self.assertTrue(self.attendance.automation_enabled)
+        self.assertFalse(self.attendance.handoff_reason)
+        send_mock.assert_not_called()
 
     @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
     @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
@@ -141,6 +148,13 @@ class InboxAndHandoffTests(TestCase):
         )
         self.company = EmpresaCliente.objects.create(usuario=self.user, nome='Empresa Inbox')
         AIConfiguration.objects.create(empresa=self.company, enabled=True)
+        AIPromptProfile.objects.create(
+            empresa=self.company, generated_prompt='# Prompt ativo para inbox',
+            response_delay_seconds=0,
+        )
+        WhatsAppSession.objects.create(
+            empresa=self.company, instance_name='inbox-evolution', state='CONNECTED',
+        )
         self.other_user = get_user_model().objects.create_user(
             'other', password='secure-pass',
         )

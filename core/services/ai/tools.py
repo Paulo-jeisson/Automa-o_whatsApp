@@ -314,6 +314,12 @@ class AIToolExecutor:
         reason = str(motivo or '').strip()[:500]
         state = dict(self.atendimento.conversation_state or {})
         state['handoff_reason'] = reason
+        normalized_reason = reason.casefold()
+        state['handoff_type'] = (
+            'HANDOFF_REQUESTED_BY_CUSTOMER'
+            if 'cliente' in normalized_reason and 'solicit' in normalized_reason
+            else 'HANDOFF_BUSINESS_RULE'
+        )
         self.atendimento.current_step = Atendimento.Step.WAITING_HUMAN
         self.atendimento.automation_enabled = False
         self.atendimento.status = Atendimento.STATUS_EM_ANDAMENTO

@@ -40,7 +40,8 @@ def process_job(job_id):
     except Exception as error:
         logger.exception('queue.job.failed job_id=%s task=%s attempt=%s', job.pk, job.task_name, job.attempts)
         job.last_error = f'{type(error).__name__}: {error}'[:2000]
-        if job.attempts >= job.max_attempts:
+        exhausted = job.attempts >= job.max_attempts
+        if exhausted:
             job.status = AsyncJob.Status.DEAD
         else:
             job.status = AsyncJob.Status.RETRY
@@ -48,6 +49,8 @@ def process_job(job_id):
                 seconds=min(settings.TASK_QUEUE_MAX_BACKOFF, settings.TASK_QUEUE_BACKOFF * (2 ** (job.attempts - 1))),
             )
         job.save(update_fields=['status', 'available_at', 'last_error'])
+        if exhausted:
+            _handle_exhausted_job(job, error)
         return job
     job.status = AsyncJob.Status.COMPLETED
     job.completed_at = timezone.now()
@@ -76,3 +79,25 @@ def _dispatch(task_name, payload):
         )
         return send_automatic_reply(message)
     raise ValueError(f'Tarefa não registrada: {task_name}')
+
+
+def _handle_exhausted_job(job, error):
+    if job.task_name != 'whatsapp.automatic_reply':
+        return
+    from core.services.ai.conversation import AIConversationService
+    try:
+        message = Mensagem.objects.select_related('atendimento').get(
+            pk=job.payload.get('message_id'),
+            empresa_id=job.payload.get('company_id'),
+            direcao=Mensagem.DIRECAO_ENTRADA,
+        )
+    except Mensagem.DoesNotExist:
+        return
+    failure_type = 'AI_PERMANENT_FAILURE'
+    AIConversationService.handoff_after_failure(
+        message.atendimento, failure_type=failure_type,
+    )
+    logger.error(
+        'whatsapp.auto_reply.exhausted company_id=%s attendance_id=%s job_id=%s attempts=%s type=%s',
+        message.empresa_id, message.atendimento_id, job.pk, job.attempts, type(error).__name__,
+    )

@@ -11,6 +11,8 @@ from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
 from .models import (
+    AIConfiguration,
+    AIPromptProfile,
     Atendimento,
     Contato,
     EmpresaCliente,
@@ -181,12 +183,19 @@ class WhatsAppCloudClientTests(TestCase):
         self.assertEqual(payload['message_id'], 'wamid.inbound-1')
 
 
-@override_settings(META_ACCESS_TOKEN='token-de-teste')
+@override_settings(
+    META_ACCESS_TOKEN='token-de-teste', AI_ENABLED=True, OPENAI_API_KEY='test-only',
+)
 class OutboundServiceTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_user(username='outbound', password='senha-segura')
         self.company = EmpresaCliente.objects.create(usuario=self.user, nome='Empresa Outbound')
+        AIConfiguration.objects.create(empresa=self.company, enabled=True)
+        AIPromptProfile.objects.create(
+            empresa=self.company, generated_prompt='# Prompt ativo para testes',
+            response_delay_seconds=0,
+        )
         self.integration = WhatsAppIntegration.objects.create(
             company=self.company,
             phone_number_id='123456789',
@@ -252,7 +261,8 @@ class OutboundServiceTests(TestCase):
 
     @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
     @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
-    def test_new_inbound_sends_configured_flow_response(self, send_mock, _read_mock):
+    @patch('core.services.whatsapp.outbound.AIConversationService.reply', return_value=None)
+    def test_new_inbound_sends_configured_flow_response(self, _reply_mock, send_mock, _read_mock):
         FluxoAtendimento.objects.create(
             empresa=self.company,
             **dados_padrao_fluxo(self.company),

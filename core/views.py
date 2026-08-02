@@ -41,6 +41,7 @@ from .forms import (
 from .models import (
     Agendamento,
     AIConfiguration,
+    AIPromptProfile,
     Atendimento,
     BloqueioAgenda,
     DisponibilidadeSemanal,
@@ -1016,9 +1017,12 @@ def assumir_atendimento(request, atendimento_id):
         atendimento.status = Atendimento.STATUS_EM_ANDAMENTO
         atendimento.assigned_to = request.user
         atendimento.assigned_at = timezone.now()
+        conversation_state = dict(atendimento.conversation_state or {})
+        conversation_state['handoff_type'] = 'HANDOFF_MANUAL_BY_AGENT'
+        atendimento.conversation_state = conversation_state
         atendimento.save(update_fields=[
             'current_step', 'automation_enabled', 'status',
-            'assigned_to', 'assigned_at',
+            'assigned_to', 'assigned_at', 'conversation_state',
         ])
     record_audit(request, 'attendance.assigned_to_human', empresa=empresa, target=atendimento)
     messages.success(request, 'Atendimento assumido pela equipe.')
@@ -1064,25 +1068,48 @@ def enviar_mensagem_atendimento(request, atendimento_id):
 @require_POST
 def devolver_atendimento_ia(request, atendimento_id):
     empresa = _empresa_do_usuario(request)
+    require_permission(request.user, empresa, 'attend')
     configuration = AIConfiguration.objects.filter(empresa=empresa, enabled=True).first()
     if not configuration or not configuration.is_available:
         messages.error(request, 'A IA desta empresa não está disponível.')
+        return redirect('atendimento_detalhe', atendimento_id=atendimento_id)
+    if not AIPromptProfile.objects.filter(
+        empresa=empresa, generated_prompt__regex=r'\S',
+    ).exists():
+        messages.error(request, 'Ative o Prompt da IA antes de retomar a automação.')
+        return redirect('atendimento_detalhe', atendimento_id=atendimento_id)
+    if not WhatsAppSession.objects.filter(empresa=empresa, state='CONNECTED').exists():
+        messages.error(request, 'Conecte a sessão do WhatsApp antes de retomar a automação.')
         return redirect('atendimento_detalhe', atendimento_id=atendimento_id)
     with transaction.atomic():
         atendimento = get_object_or_404(
             Atendimento.objects.select_for_update(), pk=atendimento_id, empresa=empresa,
         )
+        if atendimento.current_step not in {
+            Atendimento.Step.WAITING_HUMAN, Atendimento.Step.HUMAN,
+        }:
+            messages.error(request, 'Somente atendimentos em modo humano podem retomar a IA.')
+            return redirect('atendimento_detalhe', atendimento_id=atendimento.pk)
+        previous_step = atendimento.current_step
+        conversation_state = dict(atendimento.conversation_state or {})
+        conversation_state.pop('handoff_reason', None)
+        conversation_state.pop('handoff_type', None)
         atendimento.current_step = Atendimento.Step.MENU
         atendimento.automation_enabled = True
+        atendimento.status = Atendimento.STATUS_EM_ANDAMENTO
         atendimento.assigned_to = None
         atendimento.assigned_at = None
         atendimento.handoff_reason = ''
+        atendimento.conversation_state = conversation_state
         atendimento.save(update_fields=[
-            'current_step', 'automation_enabled', 'assigned_to',
-            'assigned_at', 'handoff_reason',
+            'current_step', 'automation_enabled', 'status', 'assigned_to',
+            'assigned_at', 'handoff_reason', 'conversation_state',
         ])
-    record_audit(request, 'attendance.returned_to_ai', empresa=empresa, target=atendimento)
-    messages.success(request, 'Atendimento devolvido para a IA.')
+    record_audit(
+        request, 'attendance.returned_to_ai', empresa=empresa, target=atendimento,
+        metadata={'previous_step': previous_step, 'new_step': Atendimento.Step.MENU},
+    )
+    messages.success(request, 'IA retomada. Ela responderá somente à próxima mensagem recebida.')
     return redirect('atendimento_detalhe', atendimento_id=atendimento.pk)
 
 
