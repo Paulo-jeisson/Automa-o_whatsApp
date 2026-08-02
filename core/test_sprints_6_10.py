@@ -12,6 +12,7 @@ from core.models import (
     Contato,
     EmpresaCliente,
     Mensagem,
+    WhatsAppSession,
     WhatsAppIntegration,
 )
 from core.services.ai.exceptions import AIProviderError
@@ -39,6 +40,9 @@ class AIWhatsAppConversationTests(TestCase):
             phone_number_id='phone-ai',
             whatsapp_business_account_id='waba-ai',
         )
+        WhatsAppSession.objects.create(
+            empresa=self.company, instance_name='ai-evolution', state='CONNECTED',
+        )
         self.contact = Contato.objects.create(
             empresa=self.company, whatsapp_id='551100000001', nome='Cliente',
         )
@@ -53,8 +57,8 @@ class AIWhatsAppConversationTests(TestCase):
             tipo='text', texto='Quero marcar uma consulta',
         )
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.mark_as_read')
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     @patch('core.services.ai.conversation.AIAgent.respond')
     def test_enabled_ai_replaces_rigid_flow_for_text_message(
         self, respond_mock, send_mock, _read_mock,
@@ -73,8 +77,8 @@ class AIWhatsAppConversationTests(TestCase):
             self.attendance.pk,
         )
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.mark_as_read')
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     @patch('core.services.ai.conversation.AIAgent.respond')
     def test_provider_failure_sends_safe_fallback_and_hands_off(
         self, respond_mock, send_mock, _read_mock,
@@ -84,14 +88,14 @@ class AIWhatsAppConversationTests(TestCase):
 
         outbound = send_automatic_reply(self.inbound)
 
-        self.assertEqual(outbound.texto, FALLBACK_MESSAGE)
+        self.assertIsNone(outbound)
         self.attendance.refresh_from_db()
         self.assertEqual(self.attendance.current_step, Atendimento.Step.WAITING_HUMAN)
         self.assertFalse(self.attendance.automation_enabled)
         self.assertTrue(self.attendance.handoff_reason)
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.mark_as_read')
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     @patch('core.services.ai.conversation.AIAgent.respond')
     def test_prompt_attack_is_rejected_without_calling_provider(
         self, respond_mock, send_mock, _read_mock,
@@ -104,7 +108,7 @@ class AIWhatsAppConversationTests(TestCase):
         self.assertEqual(outbound.texto, OUT_OF_SCOPE_MESSAGE)
         respond_mock.assert_not_called()
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     def test_human_attendance_never_receives_ai_response(self, send_mock):
         self.attendance.current_step = Atendimento.Step.HUMAN
         self.attendance.automation_enabled = False

@@ -3,6 +3,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.text import slugify
 from django.utils import timezone
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 
 class EmpresaCliente(models.Model):
@@ -550,6 +551,40 @@ class DisponibilidadeSemanal(models.Model):
         return f'{self.get_dia_semana_display()} {self.hora_inicio:%H:%M}-{self.hora_fim:%H:%M}'
 
 
+class CalendarConfiguration(models.Model):
+    empresa = models.OneToOneField(EmpresaCliente, on_delete=models.CASCADE, related_name='calendar_configuration')
+    enabled = models.BooleanField(default=False)
+    public_slug = models.SlugField(max_length=140, unique=True)
+    display_name = models.CharField(max_length=140)
+    weekdays = models.JSONField(default=list)
+    start_time = models.TimeField(default='08:00')
+    end_time = models.TimeField(default='18:00')
+    break_start = models.TimeField(null=True, blank=True)
+    break_end = models.TimeField(null=True, blank=True)
+    saturday_start = models.TimeField(null=True, blank=True, default='09:00')
+    saturday_end = models.TimeField(null=True, blank=True, default='13:00')
+    slot_duration_minutes = models.PositiveSmallIntegerField(default=30)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['empresa__nome']
+
+
+class IgnoredPhoneNumber(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='ignored_phone_numbers')
+    phone_number = models.CharField(max_length=20)
+    name = models.CharField(max_length=120, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name', 'phone_number']
+        constraints = [models.UniqueConstraint(fields=['empresa', 'phone_number'], name='unique_ignored_phone_per_company')]
+
+    def __str__(self):
+        return self.name or self.phone_number
+
+
+
 class BloqueioAgenda(models.Model):
     empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='bloqueios_agenda')
     data = models.DateField()
@@ -1036,6 +1071,10 @@ class AIPromptProfile(models.Model):
     generated_prompt = models.TextField(blank=True)
     draft_prompt = models.TextField(blank=True)
     autosaved_at = models.DateTimeField(null=True, blank=True)
+    response_delay_seconds = models.PositiveSmallIntegerField(
+        default=3,
+        validators=[MinValueValidator(0), MaxValueValidator(60)],
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
 

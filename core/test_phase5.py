@@ -149,7 +149,7 @@ class AgendaPanelTests(Phase5Base):
         )
         response = self.client.get(reverse('agenda'), {'inicio': self.future, 'fim': self.future})
         self.assertContains(response, appointment.servico.nome)
-        self.assertEqual(self.client.get(reverse('dashboard')).status_code, 200)
+        self.assertRedirects(self.client.get(reverse('dashboard')), reverse('prompt_generator'))
 
     def test_idor_cannot_open_other_company_appointment(self):
         other_user = get_user_model().objects.create_user('empresa-b')

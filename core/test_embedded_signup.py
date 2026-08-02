@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .models import Atendimento, Contato, EmpresaCliente, WhatsAppIntegration
+from .models import Atendimento, Contato, EmpresaCliente, WhatsAppIntegration, WhatsAppSession
 from .services.whatsapp.client import SendTextResult
 from .services.whatsapp.embedded_signup import EmbeddedSignupService
 from .services.whatsapp.exceptions import WhatsAppAPIError, WhatsAppProviderError
@@ -317,17 +317,15 @@ class PerTenantOutboundTokenTests(TestCase):
             necessidade='Agendar',
         )
 
+        WhatsAppSession.objects.create(
+            empresa=empresa, instance_name='tenant-evolution', state='CONNECTED',
+        )
         with patch(
-            'core.services.whatsapp.outbound.WhatsAppCloudClient'
-        ) as client_class:
-            client_class.return_value.send_text.return_value = SendTextResult('wamid.1')
+            'core.services.whatsapp.outbound.EvolutionProvider.send_text'
+        ) as send_mock:
+            send_mock.return_value = SendTextResult('wamid.1')
             send_text_for_attendance(atendimento, 'Olá')
 
-        self.assertEqual(
-            client_class.call_args.kwargs['access_token'],
-            'token-exclusivo-tenant',
-        )
-        self.assertNotEqual(
-            client_class.call_args.kwargs['access_token'],
-            'token-global-legado',
+        send_mock.assert_called_once_with(
+            'tenant-evolution', contato.whatsapp_id, 'Olá',
         )

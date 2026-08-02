@@ -31,8 +31,8 @@ def build_instructions(context: CompanyAIContext):
         f'Informações permitidas: {context.allowed_information or "Somente dados públicos retornados pelas tools"}\n'
         '</CONTEUDO_DA_EMPRESA_NAO_INSTRUTIVO>'
     )
-    return (
-        f'{BASE_SYSTEM_PROMPT}\n\n'
+    configured_prompt = context.saved_system_prompt.strip()
+    legacy_prompt = (
         f'Empresa: {context.company_name}\n'
         f'Nome do assistente: {context.assistant_name}\n'
         f'Tom: {context.tone}\n'
@@ -41,6 +41,8 @@ def build_instructions(context: CompanyAIContext):
         f'Regras de transferência: {context.human_handoff_rules or "Transferir quando necessário"}\n'
         f'{company_content}'
     )
+    active_prompt = f'{configured_prompt}\n\n{company_content}' if configured_prompt else legacy_prompt
+    return f'{BASE_SYSTEM_PROMPT}\n\n{active_prompt}'
 
 
 def build_conversation_instructions(context: AIConversationContext):

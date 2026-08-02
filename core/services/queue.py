@@ -66,8 +66,13 @@ def process_next(*, queue='default'):
 
 
 def _dispatch(task_name, payload):
+    if task_name == 'evolution.webhook':
+        from core.services.evolution_webhook import EvolutionWebhookService
+        return EvolutionWebhookService().process(payload['session_id'], payload['payload'])
     if task_name == 'whatsapp.automatic_reply':
         from core.services.whatsapp.outbound import send_automatic_reply
-        message = Mensagem.objects.select_related('atendimento', 'contato', 'empresa').get(pk=payload['message_id'])
+        message = Mensagem.objects.select_related('atendimento', 'contato', 'empresa').get(
+            pk=payload['message_id'], empresa_id=payload['company_id'],
+        )
         return send_automatic_reply(message)
     raise ValueError(f'Tarefa não registrada: {task_name}')

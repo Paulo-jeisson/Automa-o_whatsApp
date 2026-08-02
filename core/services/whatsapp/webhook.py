@@ -50,7 +50,10 @@ def process_webhook_event(event: NormalizedWebhookEvent):
         if created:
             from core.services.queue import enqueue
             enqueue(
-                'whatsapp.automatic_reply', {'message_id': inbound_message.pk},
+                'whatsapp.automatic_reply', {
+                    'message_id': inbound_message.pk,
+                    'company_id': inbound_message.empresa_id,
+                },
                 idempotency_key=f'automatic-reply:{inbound_message.external_message_id}',
                 queue='whatsapp',
             )

@@ -16,6 +16,7 @@ from .models import (
     EmpresaCliente,
     FluxoAtendimento,
     Mensagem,
+    WhatsAppSession,
     WhatsAppIntegration,
     dados_padrao_fluxo,
 )
@@ -191,6 +192,9 @@ class OutboundServiceTests(TestCase):
             phone_number_id='123456789',
             whatsapp_business_account_id='987654321',
         )
+        WhatsAppSession.objects.create(
+            empresa=self.company, instance_name='outbound-evolution', state='CONNECTED',
+        )
         self.contact = Contato.objects.create(
             empresa=self.company,
             whatsapp_id='5511988887777',
@@ -214,7 +218,7 @@ class OutboundServiceTests(TestCase):
             texto='Oi',
         )
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     def test_success_persists_outbound_after_meta_accepts(self, send_mock):
         send_mock.return_value = SendTextResult('wamid.outbound-1')
 
@@ -224,7 +228,7 @@ class OutboundServiceTests(TestCase):
         self.assertEqual(message.status, Mensagem.STATUS_ACEITA)
         self.assertEqual(message.external_message_id, 'wamid.outbound-1')
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     def test_api_failure_does_not_create_outbound(self, send_mock):
         send_mock.side_effect = WhatsAppAPIError('Falha segura.')
 
@@ -246,8 +250,8 @@ class OutboundServiceTests(TestCase):
         with self.assertRaises(WhatsAppProviderError):
             send_text_for_attendance(self.attendance, 'Resposta')
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.mark_as_read')
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     def test_new_inbound_sends_configured_flow_response(self, send_mock, _read_mock):
         FluxoAtendimento.objects.create(
             empresa=self.company,
@@ -258,11 +262,11 @@ class OutboundServiceTests(TestCase):
         outbound = send_automatic_reply(self.inbound)
 
         self.assertIsNotNone(outbound)
-        sent_text = send_mock.call_args.args[1]
+        sent_text = send_mock.call_args.args[2]
         self.assertIn(self.company.nome, sent_text)
         self.assertIn('1 -', sent_text)
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     def test_disabled_automation_does_not_send(self, send_mock):
         self.attendance.automation_enabled = False
         self.attendance.save(update_fields=['automation_enabled'])
@@ -271,7 +275,7 @@ class OutboundServiceTests(TestCase):
         self.assertIsNone(send_automatic_reply(self.inbound))
         send_mock.assert_not_called()
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     def test_outbound_message_never_triggers_auto_reply(self, send_mock):
         outbound = Mensagem.objects.create(
             empresa=self.company,
@@ -287,13 +291,14 @@ class OutboundServiceTests(TestCase):
         self.assertIsNone(send_automatic_reply(outbound))
         send_mock.assert_not_called()
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
-    def test_non_text_inbound_does_not_send(self, send_mock):
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
+    def test_non_text_inbound_receives_safe_fallback(self, send_mock):
         self.inbound.tipo = 'image'
         self.inbound.texto = ''
+        send_mock.return_value = SendTextResult('wamid.media-fallback')
 
-        self.assertIsNone(send_automatic_reply(self.inbound))
-        send_mock.assert_not_called()
+        self.assertIsNotNone(send_automatic_reply(self.inbound))
+        send_mock.assert_called_once()
 
     def test_manual_command_requires_explicit_confirmation(self):
         with self.assertRaises(CommandError):

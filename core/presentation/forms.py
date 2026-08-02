@@ -2,18 +2,32 @@ from django import forms
 
 
 class PromptGeneratorForm(forms.Form):
-    agent_name = forms.CharField(label='Nome do agente', max_length=100)
-    company_name = forms.CharField(label='Empresa', max_length=140)
-    segment = forms.CharField(label='Segmento', max_length=100)
-    uses_calendar = forms.BooleanField(label='Utiliza agenda', required=False)
-    profession = forms.CharField(label='Profissão', max_length=100, required=False)
-    personality = forms.CharField(label='Personalidade', widget=forms.Textarea(attrs={'rows': 3}), required=False)
-    objective = forms.CharField(label='Objetivo', widget=forms.Textarea(attrs={'rows': 3}), required=False)
-    service_style = forms.CharField(label='Forma de atendimento', widget=forms.Textarea(attrs={'rows': 3}), required=False)
-    tone = forms.CharField(label='Tom de voz', max_length=120, required=False)
-    forbidden_words = forms.CharField(label='Palavras proibidas', widget=forms.Textarea(attrs={'rows': 2}), required=False)
-    limitations = forms.CharField(label='Limitações', widget=forms.Textarea(attrs={'rows': 3}), required=False)
-    business_hours = forms.CharField(label='Horário', max_length=180, required=False)
-    products = forms.CharField(label='Produtos', widget=forms.Textarea(attrs={'rows': 3}), required=False)
-    services = forms.CharField(label='Serviços', widget=forms.Textarea(attrs={'rows': 3}), required=False)
-    notes = forms.CharField(label='Observações', widget=forms.Textarea(attrs={'rows': 3}), required=False)
+    agent_name = forms.CharField(
+        label='Nome do(a) agente', max_length=100,
+        widget=forms.TextInput(attrs={'placeholder': 'Ex: Maria, João, etc.'}),
+    )
+    company_name = forms.CharField(
+        label='Nome da sua empresa', max_length=140,
+        widget=forms.TextInput(attrs={'placeholder': 'Ex: Clínica São José'}),
+    )
+    segment = forms.CharField(
+        label='Ramo do seu negócio', max_length=140,
+        widget=forms.TextInput(attrs={'placeholder': 'Ex: Saúde, Educação, Comércio, etc.'}),
+    )
+    calendar_usage = forms.CharField(
+        label='Uso do calendário / agendamentos', max_length=300,
+        widget=forms.TextInput(attrs={'placeholder': 'Ex: Ofereça agendamento quando o cliente quiser marcar um horário.'}),
+    )
+    profession = forms.CharField(
+        label='Profissão do(a) agente', max_length=100,
+        widget=forms.TextInput(attrs={'placeholder': 'Ex: Recepcionista, Atendente, Consultor, etc.'}),
+    )
+    personality = forms.CharField(
+        label='Personalidade e tom',
+        widget=forms.Textarea(attrs={'rows': 4, 'placeholder': 'Ex: Acolhedor, paciente, proativo, amigável e natural...'}),
+        help_text='Descreva como o agente deve se comportar e se comunicar',
+    )
+    additional_information = forms.CharField(
+        label='Complemento (informações adicionais)', required=False,
+        widget=forms.Textarea(attrs={'rows': 4, 'placeholder': 'Adicione informações extras que você gostaria que o agente soubesse...'}),
+    )

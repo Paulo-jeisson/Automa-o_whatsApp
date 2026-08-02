@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block title %}Números Pass | ZapFluxo{% endblock %}
+{% block body %}<main class="ai-reference-page"><div class="ai-reference-container"><section class="reference-tab-area pass-tab-area">
+  {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}{% endif %}
+  <div class="reference-card pass-reference-card">
+    <h2><span aria-hidden="true">⊘</span> NÚMEROS PASS</h2>
+    <p class="reference-tip">Números nesta lista são <strong>ignorados pela IA</strong> — mensagens recebidas não terão resposta automática.</p>
+    <form method="post" class="pass-add-form">{% csrf_token %}<input name="phone_number" inputmode="tel" autocomplete="tel" placeholder="Telefone (ex: 5527999999999)" required><input name="name" placeholder="Nome (opcional)" maxlength="120"><button class="btn btn-primary" type="submit">＋ ADICIONAR</button></form>
+    <div class="pass-number-list">{% for number in ignored_numbers %}<article><div><strong>{{ number.phone_number }}</strong>{% if number.name %}<span>{{ number.name }}</span>{% endif %}</div><form method="post" action="{% url 'ignored_number_delete' number.id %}">{% csrf_token %}<button class="pass-delete" aria-label="Remover {{ number.phone_number }}">× REMOVER</button></form></article>{% empty %}<p>NENHUM NÚMERO NA LISTA</p>{% endfor %}</div>
+  </div>
+</section></div></main>{% endblock %}

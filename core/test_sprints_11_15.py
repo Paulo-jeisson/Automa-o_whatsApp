@@ -17,7 +17,7 @@ from core.models import (
     Agendamento, AppointmentReminder, CompanyInvitation, CompanyMembership,
     CompanyOnboarding, Contato, DisponibilidadeSemanal, EmpresaCliente,
     PaymentEvent, PaymentHistory, Plan, ReminderConfiguration, Servico,
-    Subscription, UsageCounter, WhatsAppIntegration,
+    Subscription, UsageCounter, WhatsAppIntegration, WhatsAppSession,
 )
 from core.services.billing import StripeBillingService
 from core.services.entitlements import EntitlementService
@@ -215,6 +215,9 @@ class ReminderTests(TestCase):
             company=self.company, phone_number_id='123456',
             whatsapp_business_account_id='654321',
         )
+        WhatsAppSession.objects.create(
+            empresa=self.company, instance_name='reminder-evolution', state='CONNECTED',
+        )
         contact = Contato.objects.create(
             empresa=self.company, whatsapp_id='5511999999999', nome='Ana',
         )
@@ -231,7 +234,7 @@ class ReminderTests(TestCase):
         ReminderService.schedule(self.appointment)
         self.assertEqual(self.appointment.reminders.count(), 2)
 
-    @patch('core.services.reminders.WhatsAppCloudClient.send_template')
+    @patch('core.services.reminders.EvolutionProvider.send_text')
     def test_due_reminder_uses_approved_template_and_persists_result(self, send_mock):
         send_mock.return_value = SimpleNamespace(message_id='wamid.reminder.1')
         reminder = AppointmentReminder.objects.create(
@@ -242,5 +245,5 @@ class ReminderTests(TestCase):
         reminder.refresh_from_db()
         self.assertEqual(reminder.status, AppointmentReminder.Status.SENT)
         call = send_mock.call_args
-        self.assertEqual(call.kwargs['template_name'], 'lembrete_agendamento')
-        self.assertIn('Consulta', call.kwargs['parameters'])
+        self.assertEqual(call.args[0], 'reminder-evolution')
+        self.assertIn('Consulta', call.args[2])

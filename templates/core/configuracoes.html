@@ -95,40 +95,16 @@
         </article>
         <article class="settings-info-card">
           <span class="eyebrow">WhatsApp</span>
-          {% if whatsapp_integration %}
-            <strong>{{ whatsapp_integration.get_onboarding_status_display }}</strong>
-            <small>Phone Number ID: {{ whatsapp_integration.phone_number_id }}</small>
-            <small>WABA ID: {{ whatsapp_integration.whatsapp_business_account_id }}</small>
-            <small>
-              Última comunicação:
-              {% if whatsapp_integration.last_communication_at %}
-                {{ whatsapp_integration.last_communication_at|date:"d/m/Y H:i" }}
-              {% else %}
-                Ainda não recebida
-              {% endif %}
-            </small>
-            {% if whatsapp_integration.is_active %}
-              <form method="post" action="{% url 'testar_integracao_whatsapp' %}">
-                {% csrf_token %}
-                <button class="btn btn-outline settings-test-button" type="submit">Testar integração</button>
-              </form>
-            {% endif %}
-            <a class="btn btn-primary settings-test-button" href="{% url 'whatsapp_onboarding' %}">
-              {% if whatsapp_integration.is_connected %}Reconectar WhatsApp{% else %}Conectar WhatsApp{% endif %}
-            </a>
-            {% if whatsapp_integration.is_connected %}
-              <form method="post" action="{% url 'whatsapp_desconectar' %}">
-                {% csrf_token %}
-                <button class="btn btn-outline settings-test-button" type="submit">Desconectar</button>
-              </form>
-            {% endif %}
+          {% if whatsapp_session %}
+            <strong>{{ whatsapp_session.get_state_display }}</strong>
+            <small>Número conectado: {{ whatsapp_session.phone_number|default:"—" }}</small>
+            <small>Instância: {{ whatsapp_session.instance_name }}</small>
+            <small>Última conexão: {{ whatsapp_session.connected_at|date:"d/m/Y H:i"|default:"—" }}</small>
           {% else %}
-            <strong>Não configurado</strong>
-            <small>Autorize o número comercial com segurança pela Meta.</small>
-            <a class="btn btn-primary settings-test-button" href="{% url 'whatsapp_onboarding' %}">
-              Conectar WhatsApp
-            </a>
+            <strong>Sessão não iniciada</strong>
+            <small>Conecte uma instância exclusiva pelo QR Code.</small>
           {% endif %}
+          <a class="btn btn-primary settings-test-button" href="{% url 'prompt_generator' %}#whatsapp-qr">Gerenciar WhatsApp</a>
         </article>
       </aside>
     </section>

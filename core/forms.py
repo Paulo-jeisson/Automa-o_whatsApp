@@ -9,7 +9,7 @@ from .models import (
     EmpresaCliente, FluxoAtendimento, Servico,
     CompanyInvitation, CompanyMembership, ReminderConfiguration, KnowledgeBaseArticle,
     DataRetentionPolicy, DataSubjectRequest,
-    MetaOnboardingVerification,
+    MetaOnboardingVerification, CalendarConfiguration,
 )
 
 
@@ -383,6 +383,30 @@ class DisponibilidadeSemanalForm(forms.ModelForm):
         model = DisponibilidadeSemanal
         fields = ['dia_semana', 'hora_inicio', 'hora_fim', 'intervalo_minutos', 'ativo']
         widgets = {'hora_inicio': forms.TimeInput(attrs={'type': 'time'}), 'hora_fim': forms.TimeInput(attrs={'type': 'time'})}
+
+
+class CalendarConfigurationForm(forms.ModelForm):
+    WEEKDAY_CHOICES = [('0', 'SEG'), ('1', 'TER'), ('2', 'QUA'), ('3', 'QUI'), ('4', 'SEX'), ('5', 'SÁB'), ('6', 'DOM')]
+    weekdays = forms.MultipleChoiceField(
+        label='Dias de atendimento', choices=WEEKDAY_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    class Meta:
+        model = CalendarConfiguration
+        fields = [
+            'enabled', 'public_slug', 'display_name', 'weekdays', 'start_time', 'end_time',
+            'break_start', 'break_end', 'saturday_start', 'saturday_end', 'slot_duration_minutes',
+        ]
+        widgets = {
+            'start_time': forms.TimeInput(attrs={'type': 'time'}),
+            'end_time': forms.TimeInput(attrs={'type': 'time'}),
+            'break_start': forms.TimeInput(attrs={'type': 'time'}),
+            'break_end': forms.TimeInput(attrs={'type': 'time'}),
+            'saturday_start': forms.TimeInput(attrs={'type': 'time'}),
+            'saturday_end': forms.TimeInput(attrs={'type': 'time'}),
+            'slot_duration_minutes': forms.Select(choices=[(15, '15 min'), (20, '20 min'), (30, '30 min'), (45, '45 min'), (60, '60 min'), (90, '90 min'), (120, '2 horas')]),
+        }
 
 
 class BloqueioAgendaForm(forms.ModelForm):

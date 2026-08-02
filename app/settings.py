@@ -94,6 +94,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.system_header',
             ],
         },
     },
@@ -155,7 +156,7 @@ MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = 'dashboard'
+LOGIN_REDIRECT_URL = 'prompt_generator'
 LOGOUT_REDIRECT_URL = 'login'
 
 ZAPFLUXO_WHATSAPP = ''.join(

@@ -12,9 +12,16 @@ class PromptGeneratorInput:
     objective: str
     service_style: str
     tone: str
-    forbidden_words: str
-    limitations: str
-    business_hours: str
     products: str
     services: str
-    notes: str
+    faq: str = ''
+    rules: str = ''
+    restrictions: str = ''
+    human_handoff: str = ''
+    additional_information: str = ''
+    calendar_usage: str = ''
+    # Campos legados mantidos para integrações e dados anteriores.
+    forbidden_words: str = ''
+    limitations: str = ''
+    business_hours: str = ''
+    notes: str = ''

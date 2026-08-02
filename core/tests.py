@@ -83,7 +83,7 @@ class MvpFinalizationTests(TestCase):
         dashboard_response = self.client.get(reverse('dashboard'))
         attendance_response = self.client.get(reverse('atendimentos'))
 
-        self.assertContains(dashboard_response, 'Cliente Ponta a Ponta')
+        self.assertRedirects(dashboard_response, reverse('prompt_generator'))
         self.assertContains(attendance_response, 'Cliente Ponta a Ponta')
         self.assertContains(attendance_response, 'Avisar no WhatsApp')
 
@@ -144,7 +144,7 @@ class DashboardAccessTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse('login'), response['Location'])
 
-    def test_dashboard_uses_only_logged_user_company(self):
+    def test_legacy_dashboard_redirects_to_prompt_generator(self):
         User = get_user_model()
         owner = User.objects.create_user(username='dono', password='senha-segura')
         other = User.objects.create_user(username='outro', password='senha-segura')
@@ -154,23 +154,21 @@ class DashboardAccessTests(TestCase):
         self.client.login(username='dono', password='senha-segura')
         response = self.client.get(reverse('dashboard'))
 
-        self.assertContains(response, 'Estacionamento Central')
-        self.assertNotContains(response, 'Clinica Norte')
+        self.assertRedirects(response, reverse('prompt_generator'))
 
     @override_settings(PUBLIC_BASE_URL='https://public.example')
-    def test_dashboard_uses_configured_public_url(self):
+    def test_login_uses_the_new_menu_entry_screen(self):
         User = get_user_model()
         user = User.objects.create_user(username='dono-ngrok', password='senha-segura')
         company = EmpresaCliente.objects.create(usuario=user, nome='Empresa Ngrok')
         self.client.login(username='dono-ngrok', password='senha-segura')
 
-        response = self.client.get(reverse('dashboard'))
-
-        expected_url = (
-            'https://public.example'
-            f'{company.get_atendimento_url()}'
+        self.client.logout()
+        response = self.client.post(
+            reverse('login'),
+            {'username': 'dono-ngrok', 'password': 'senha-segura'},
         )
-        self.assertContains(response, expected_url)
+        self.assertRedirects(response, reverse('prompt_generator'))
 
 
 class MinhaEmpresaTests(TestCase):

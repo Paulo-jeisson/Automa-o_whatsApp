@@ -1,16 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Agenda | ZapFluxo{% endblock %}
-{% block body %}
-<div class="app-shell">
-  <aside class="sidebar"><div class="brand"><span class="brand-mark">Z</span><div><strong>ZapFluxo</strong><small>Atendimento simples</small></div></div>
-    <nav class="nav-list"><a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a><a class="nav-item" href="{% url 'atendimentos' %}">Atendimentos</a><a class="nav-item active" href="{% url 'agenda' %}">Agenda</a><a class="nav-item" href="{% url 'fluxo' %}">Fluxo</a><a class="nav-item" href="{% url 'minha_empresa' %}">Minha Empresa</a><a class="nav-item" href="{% url 'configuracoes' %}">Configurações</a></nav>
-  </aside>
-  <main class="main-area"><header class="topbar"><div><span class="eyebrow">Agenda inteligente</span><h1>{{ empresa.nome }}</h1></div><div class="topbar-actions"><a class="btn btn-outline" href="{% url 'agenda_configuracao' %}">Horários e bloqueios</a><a class="btn btn-primary" href="{% url 'agendamento_novo' %}">Novo agendamento</a></div></header>
-    <section class="panel"><div class="panel-header"><div><span class="eyebrow">Feriados</span><h2>Bloquear data especial</h2></div></div><form method="post" action="{% url 'holiday_create' %}" class="filters-form">{% csrf_token %}<div class="form-field"><label>Data</label><input type="date" name="date" required></div><div class="form-field"><label>Nome</label><input name="name" placeholder="Feriado ou evento" required></div><button class="btn btn-outline">Adicionar bloqueio</button></form></section>
-    <section class="panel"><form method="get" class="filters-form"><div class="form-field"><label>Início</label><input type="date" name="inicio" value="{{ filtros.inicio }}"></div><div class="form-field"><label>Fim</label><input type="date" name="fim" value="{{ filtros.fim }}"></div><div class="form-field"><label>Status</label><select name="status"><option value="">Todos</option>{% for value,label in status_choices %}<option value="{{ value }}" {% if filtros.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div><div class="filter-actions"><button class="btn btn-primary">Filtrar</button></div></form></section>
-    <section class="panel"><div class="panel-header"><div><span class="eyebrow">Período</span><h2>Agendamentos</h2></div></div><div class="attendance-list">
-      {% for item in agendamentos %}<a class="attendance-card" href="{% url 'agendamento_detalhe' item.id %}"><div class="attendance-main"><div><span class="eyebrow">{{ item.data|date:"d/m/Y" }} · {{ item.hora_inicio|time:"H:i" }}</span><h3>{{ item.contato }}</h3></div><span class="status-pill">{{ item.get_status_display }}</span></div><dl class="attendance-details"><div><dt>Telefone</dt><dd>{{ item.contato.whatsapp_id }}</dd></div><div><dt>Serviço</dt><dd>{{ item.servico.nome }}</dd></div><div><dt>Origem</dt><dd>{{ item.get_origem_display }}</dd></div></dl></a>{% empty %}<div class="empty-state"><h3>Nenhum agendamento</h3><p>Não há registros no período informado.</p></div>{% endfor %}
-    </div></section>
-  </main>
-</div>
-{% endblock %}
+{% block title %}Calendário | ZapFluxo{% endblock %}
+{% block body %}<main class="ai-reference-page"><div class="ai-reference-container"><section class="reference-tab-area calendar-tab-area">
+  {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}{% endif %}
+  <div class="reference-card calendar-reference-card">
+    <h2><span aria-hidden="true">▣</span> CALENDÁRIO DE AGENDAMENTOS</h2>
+    <p class="reference-tip">Configure seu calendário público. Clientes poderão agendar diretamente pelo link. A IA também usa este calendário para marcar horários via WhatsApp.</p>
+    <form method="post" class="calendar-reference-form" novalidate>{% csrf_token %}
+      {% if calendar_form.non_field_errors %}<div class="alert">{{ calendar_form.non_field_errors }}</div>{% endif %}
+      <div class="calendar-toggle">{{ calendar_form.enabled }}<label for="{{ calendar_form.enabled.id_for_label }}">ATIVAR AGENDAMENTO AUTOMÁTICO PELA IA</label></div>
+      <div class="reference-form-group"><label for="{{ calendar_form.public_slug.id_for_label }}">URL PERSONALIZADA DO CALENDÁRIO</label><div class="calendar-slug-field"><span>/calendario/</span>{{ calendar_form.public_slug }}</div><small>Somente letras minúsculas, números e hífens. Ex: barbearia-joao</small>{{ calendar_form.public_slug.errors }}</div>
+      <div class="reference-form-group"><label for="{{ calendar_form.display_name.id_for_label }}">NOME EXIBIDO NO CALENDÁRIO PÚBLICO</label>{{ calendar_form.display_name }}{{ calendar_form.display_name.errors }}</div>
+      <div class="reference-form-group calendar-weekdays"><label>DIAS DE ATENDIMENTO</label>{{ calendar_form.weekdays }}{{ calendar_form.weekdays.errors }}</div>
+      <div class="calendar-time-grid"><div class="reference-form-group"><label>INÍCIO DO ATENDIMENTO</label>{{ calendar_form.start_time }}</div><div class="reference-form-group"><label>FIM DO ATENDIMENTO</label>{{ calendar_form.end_time }}</div><div class="reference-form-group"><label>INÍCIO DO INTERVALO <em>(OPCIONAL)</em></label>{{ calendar_form.break_start }}</div><div class="reference-form-group"><label>FIM DO INTERVALO <em>(OPCIONAL)</em></label>{{ calendar_form.break_end }}</div></div>
+      <div class="saturday-special"><strong>HORÁRIO ESPECIAL — SÁBADO</strong><div class="calendar-time-grid"><div class="reference-form-group"><label>INÍCIO</label>{{ calendar_form.saturday_start }}</div><div class="reference-form-group"><label>FIM</label>{{ calendar_form.saturday_end }}</div></div></div>
+      <div class="reference-form-group"><label>DURAÇÃO DE CADA HORÁRIO (MINUTOS)</label>{{ calendar_form.slot_duration_minutes }}</div>
+      <div class="reference-actions"><button class="btn btn-primary" type="submit">▣ SALVAR CONFIGURAÇÃO</button></div>
+    </form>
+  </div>
+  <div class="reference-card upcoming-calendar-card"><h2><span aria-hidden="true">☷</span> PRÓXIMOS AGENDAMENTOS</h2>{% for item in agendamentos %}<a class="calendar-appointment" href="{% url 'agendamento_detalhe' item.id %}"><strong>{{ item.data|date:"d/m/Y" }} · {{ item.hora_inicio|time:"H:i" }}</strong><span>{{ item.contato }} — {{ item.servico }}</span></a>{% empty %}<p>Nenhum agendamento futuro.</p>{% endfor %}</div>
+</section></div></main>{% endblock %}

@@ -1,7 +1,7 @@
-import hmac
 import json
 import difflib
 import csv
+import re
 
 from django.conf import settings
 from django.contrib import messages
@@ -9,18 +9,20 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.db.models import Q
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from core.access import company_for_user
 from core.application.dto import PromptGeneratorInput
-from core.application.prompt_service import PromptGeneratorService
+from core.application.prompt_compiler_service import PromptCompilerService
 from core.application.whatsapp_service import WhatsAppSessionService
+from core.domain.exceptions import ProviderUnavailable
 from django.utils import timezone
 from core.models import (
-    AIPromptProfile, AIPromptTemplate, AIPromptVersion, AttendanceAttachment,
-    AttendanceNote, AttendanceTag, Atendimento, Holiday, WhatsAppSession,
+    AIPromptProfile, AIPromptVersion, AttendanceAttachment,
+    AttendanceNote, AttendanceTag, Atendimento, Holiday, WhatsAppSession, IgnoredPhoneNumber,
 )
 from core.application.analytics_service import DashboardAnalyticsService
 from .forms import PromptGeneratorForm
@@ -32,13 +34,8 @@ def _company(request):
 
 @login_required
 def whatsapp_dashboard(request):
-    empresa = _company(request)
-    service = WhatsAppSessionService()
-    session = service.ensure(empresa)
-    return render(request, 'core/whatsapp_dashboard.html', {
-        'empresa': empresa, 'session': session,
-        'events': session.events.all()[:50],
-    })
+    _company(request)
+    return redirect(f"{reverse('prompt_generator')}#whatsapp-qr")
 
 
 @login_required
@@ -67,7 +64,14 @@ def whatsapp_action(request, action):
         messages.error(request, session.last_error)
     else:
         messages.success(request, 'Sessão WhatsApp atualizada.')
-    return redirect('whatsapp_dashboard')
+    next_url = request.POST.get('next', '')
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+    return redirect(f"{reverse('prompt_generator')}#whatsapp-qr")
 
 
 @login_required
@@ -87,65 +91,83 @@ def whatsapp_status(request):
 @csrf_exempt
 @require_POST
 def evolution_webhook(request):
-    expected = settings.EVOLUTION_WEBHOOK_SECRET
-    supplied = request.headers.get('x-zapfluxo-secret', '')
-    if expected and not hmac.compare_digest(expected, supplied):
-        return JsonResponse({'error': 'unauthorized'}, status=401)
     try:
-        payload = json.loads(request.body or b'{}')
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'invalid json'}, status=400)
-    instance_name = payload.get('instance') or payload.get('instanceName')
-    session = WhatsAppSession.objects.filter(instance_name=instance_name).first()
-    if not session:
-        return JsonResponse({'error': 'unknown instance'}, status=404)
-    event = payload.get('event', 'WEBHOOK').upper()
-    data = payload.get('data') or {}
-    state = str(data.get('state') or data.get('status') or '').lower()
-    state_map = {'open': 'CONNECTED', 'connected': 'CONNECTED', 'connecting': 'CONNECTING', 'close': 'OFFLINE', 'disconnected': 'OFFLINE'}
-    if state in state_map:
-        session.state = state_map[state]
-        session.save(update_fields=['state', 'updated_at'])
-    session.events.create(kind=event[:40], message='Evento recebido do provider.', payload=payload)
-    return JsonResponse({'ok': True})
+        from core.services.evolution_webhook import EvolutionWebhookError, EvolutionWebhookService
+        EvolutionWebhookService().accept(request.body, request.headers)
+    except ProviderUnavailable:
+        return JsonResponse({'error': 'unauthorized'}, status=401)
+    except EvolutionWebhookError:
+        return JsonResponse({'error': 'invalid payload'}, status=400)
+    return JsonResponse({'accepted': True}, status=202)
 
 
 def whatsapp_health(request):
-    configured = bool(settings.EVOLUTION_API_URL and settings.EVOLUTION_API_KEY)
+    configured = bool(
+        settings.EVOLUTION_API_URL
+        and settings.EVOLUTION_API_KEY
+        and settings.EVOLUTION_WEBHOOK_SECRET
+    )
     return JsonResponse({'ok': configured, 'provider': 'evolution-api'}, status=200 if configured else 503)
 
 
 @login_required
 def ai_dashboard(request):
-    empresa = _company(request)
-    profile = getattr(empresa, 'prompt_profile', None)
-    return render(request, 'core/ai_dashboard.html', {'empresa': empresa, 'profile': profile})
+    return prompt_generator(request)
 
 
 @login_required
 def prompt_generator(request):
     empresa = _company(request)
     profile = getattr(empresa, 'prompt_profile', None)
-    initial = dict(profile.generator_data) if profile else {
+    initial = dict(profile.generator_data) if profile and profile.generator_data else {
         'company_name': empresa.nome, 'segment': empresa.get_segmento_display(),
-        'business_hours': empresa.horario_funcionamento,
     }
+    if 'calendar_usage' not in initial:
+        initial['calendar_usage'] = 'Use o agendamento e consulte a disponibilidade antes de confirmar horários.'
     form = PromptGeneratorForm(request.POST or None, initial=initial)
-    preview = (profile.draft_prompt or profile.generated_prompt) if profile else ''
+    if request.method == 'POST' and request.POST.get('action') == 'draft' and form.is_valid():
+        profile, _ = AIPromptProfile.objects.get_or_create(empresa=empresa)
+        profile.generator_data = form.cleaned_data
+        profile.save(update_fields=['generator_data', 'updated_at'])
+        messages.success(request, 'Rascunho salvo para esta empresa.')
+        return redirect('prompt_generator')
     if request.method == 'POST' and form.is_valid():
-        data = PromptGeneratorInput(**form.cleaned_data)
-        preview = request.POST.get('prompt_content', '').strip() or PromptGeneratorService.render(data)
-        if request.POST.get('action') == 'save':
-            version = PromptGeneratorService.save_version(
-                empresa=empresa, user=request.user, data=data, content=preview,
-            )
-            messages.success(request, f'Prompt salvo como versão {version.version}.')
-            return redirect('prompt_generator')
-    profile = getattr(empresa, 'prompt_profile', None)
+        cleaned = form.cleaned_data
+        data = PromptGeneratorInput(
+            agent_name=cleaned['agent_name'], company_name=cleaned['company_name'],
+            segment=cleaned['segment'], uses_calendar=True,
+            profession=cleaned['profession'], personality=cleaned['personality'],
+            objective='Receber, orientar e conduzir o cliente ao próximo passo.',
+            service_style='Conversa natural de WhatsApp', tone=cleaned['personality'],
+            products='', services='', additional_information=cleaned['additional_information'],
+            calendar_usage=cleaned['calendar_usage'],
+        )
+        version = PromptCompilerService.compile_and_save(
+            empresa=empresa, user=request.user, data=data,
+        )
+        messages.success(request, f'Prompt compilado e salvo como versão {version.version}.')
+        return redirect('prompt_editor')
     return render(request, 'core/prompt_generator.html', {
-        'empresa': empresa, 'form': form, 'preview': preview,
-        'versions': profile.versions.all()[:20] if profile else [],
-        'prompt_templates': [('sales', 'Comercial'), ('support', 'Suporte'), ('scheduling', 'Agendamento')],
+        'empresa': empresa, 'form': form, 'profile': profile,
+    })
+
+
+@login_required
+def prompt_editor(request):
+    empresa = _company(request)
+    profile = PromptCompilerService.ensure_default_profile(empresa=empresa, user=request.user)
+    if request.method == 'POST':
+        version = PromptCompilerService.save_editor_version(
+            empresa=empresa, user=request.user, content=request.POST.get('prompt_content'),
+            response_delay_seconds=request.POST.get('response_delay_seconds', 3),
+        )
+        messages.success(request, f'Prompt salvo como versão {version.version}.')
+        return redirect('prompt_editor')
+    return render(request, 'core/prompt_editor.html', {
+        'empresa': empresa,
+        'profile': profile,
+        'prompt': profile.draft_prompt or profile.generated_prompt,
+        'versions': profile.versions.all()[:30],
     })
 
 
@@ -158,7 +180,9 @@ def prompt_restore(request, version_id):
     profile.generated_prompt = version.content
     profile.save(update_fields=['generated_prompt', 'updated_at'])
     messages.success(request, f'Versão {version.version} restaurada para edição.')
-    return redirect('prompt_generator')
+    profile.draft_prompt = version.content
+    profile.save(update_fields=['draft_prompt', 'updated_at'])
+    return redirect('prompt_editor')
 
 
 @login_required
@@ -179,7 +203,10 @@ def prompt_duplicate(request, version_id):
     number = (source.profile.versions.order_by('-version').first().version) + 1
     AIPromptVersion.objects.create(profile=source.profile, version=number, content=source.content, created_by=request.user)
     messages.success(request, f'Versão {source.version} duplicada como {number}.')
-    return redirect('prompt_generator')
+    source.profile.generated_prompt = source.content
+    source.profile.draft_prompt = source.content
+    source.profile.save(update_fields=['generated_prompt', 'draft_prompt', 'updated_at'])
+    return redirect('prompt_editor')
 
 
 @login_required
@@ -192,22 +219,35 @@ def prompt_diff(request):
 
 
 @login_required
-@require_POST
-def prompt_apply_template(request):
+def prompt_export(request):
+    profile = get_object_or_404(AIPromptProfile, empresa=_company(request))
+    response = HttpResponse(profile.generated_prompt, content_type='text/markdown; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="prompt-ia.md"'
+    return response
+
+
+@login_required
+def ignored_numbers(request):
     empresa = _company(request)
-    templates = {
-        'sales': '# Identidade\nVocê é um consultor comercial.\n\n# Missão\nQualificar oportunidades e orientar o próximo passo.\n\n# Restrições\nNunca invente preços ou condições.',
-        'support': '# Identidade\nVocê é um agente de suporte.\n\n# Missão\nDiagnosticar com perguntas objetivas e resolver com segurança.\n\n# Transferência Humana\nTransfira incidentes críticos.',
-        'scheduling': '# Identidade\nVocê é um assistente de agendamentos.\n\n# Agendamento\nConsulte disponibilidade antes de confirmar. Nunca crie horários indisponíveis.',
-    }
-    content = templates.get(request.POST.get('template'))
-    if not content:
-        return JsonResponse({'error': 'template invalid'}, status=400)
-    profile, _ = AIPromptProfile.objects.get_or_create(empresa=empresa)
-    profile.draft_prompt = content
-    profile.autosaved_at = timezone.now()
-    profile.save(update_fields=['draft_prompt', 'autosaved_at', 'updated_at'])
-    return redirect('prompt_generator')
+    if request.method == 'POST':
+        phone = re.sub(r'\D', '', request.POST.get('phone_number', ''))
+        name = request.POST.get('name', '').strip()[:120]
+        if not 10 <= len(phone) <= 15:
+            messages.error(request, 'Informe um telefone com DDD e código do país.')
+        else:
+            _, created = IgnoredPhoneNumber.objects.get_or_create(empresa=empresa, phone_number=phone, defaults={'name': name})
+            messages.success(request, 'Número adicionado à lista Pass.') if created else messages.warning(request, 'Este número já está na lista.')
+        return redirect('ignored_numbers')
+    return render(request, 'core/ignored_numbers.html', {'empresa': empresa, 'ignored_numbers': empresa.ignored_phone_numbers.all()})
+
+
+@login_required
+@require_POST
+def ignored_number_delete(request, number_id):
+    number = get_object_or_404(IgnoredPhoneNumber, pk=number_id, empresa=_company(request))
+    number.delete()
+    messages.success(request, 'Número removido da lista Pass.')
+    return redirect('ignored_numbers')
 
 
 @login_required
@@ -232,6 +272,29 @@ def conversations_crm(request):
     selected_id = request.GET.get('conversation')
     selected = conversations.filter(pk=selected_id).first() if selected_id else conversations.first()
     return render(request, 'core/conversations_crm.html', {'empresa': empresa, 'conversations': conversations, 'selected': selected, 'query': query, 'state': state, 'tags': empresa.attendance_tags.all()})
+
+
+@login_required
+def conversation_export(request, atendimento_id):
+    atendimento = get_object_or_404(
+        Atendimento.objects.prefetch_related('mensagens'), pk=atendimento_id, empresa=_company(request),
+    )
+    lines = [f'Conversa com {atendimento.nome_cliente or atendimento.telefone_cliente}', '']
+    for message in atendimento.mensagens.order_by('criado_em'):
+        author = 'Cliente' if message.direcao == 'entrada' else ('Atendente' if message.sent_by_id else 'IA')
+        lines.append(f'[{message.criado_em:%d/%m/%Y %H:%M:%S}] {author}: {message.texto}')
+    response = HttpResponse('\n'.join(lines), content_type='text/plain; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="conversa-{atendimento.pk}.txt"'
+    return response
+
+
+@login_required
+@require_POST
+def conversation_delete(request, atendimento_id):
+    atendimento = get_object_or_404(Atendimento, pk=atendimento_id, empresa=_company(request))
+    atendimento.delete()
+    messages.success(request, 'Conversa excluída.')
+    return redirect('conversations_crm')
 
 
 @login_required

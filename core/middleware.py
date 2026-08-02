@@ -13,7 +13,7 @@ class RateLimitMiddleware:
     POLICIES = (
         ('login', lambda r: r.path == '/login/' and r.method == 'POST', 10, 300),
         ('api_token', lambda r: r.path.startswith('/api/auth/') and r.method == 'POST', 20, 300),
-        ('webhook', lambda r: r.path == '/webhooks/whatsapp/', 120, 60),
+        ('webhook', lambda r: r.path in {'/webhooks/whatsapp/', '/webhooks/evolution/'}, 120, 60),
         (
             'public_attendance',
             lambda r: r.path.startswith('/atendimento/') and r.method == 'POST',

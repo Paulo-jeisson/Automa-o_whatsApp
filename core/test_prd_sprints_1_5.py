@@ -24,9 +24,13 @@ class PRDSprintsOneToFiveTests(TestCase):
     def test_whatsapp_module_is_tenant_isolated(self):
         own = WhatsAppSessionService(provider=Mock()).ensure(self.company)
         other = WhatsAppSessionService(provider=Mock()).ensure(self.other_company)
-        response = self.client.get(reverse('whatsapp_dashboard'))
-        self.assertContains(response, own.instance_name)
-        self.assertNotContains(response, other.instance_name)
+        own.qr_code = 'data:image/png;base64,b3du'
+        own.save(update_fields=['qr_code'])
+        other.qr_code = 'data:image/png;base64,b3RoZXI='
+        other.save(update_fields=['qr_code'])
+        response = self.client.get(reverse('conversations_crm'))
+        self.assertContains(response, own.qr_code)
+        self.assertNotContains(response, other.qr_code)
 
     def test_connect_persists_qr_and_state(self):
         provider = Mock()
@@ -46,7 +50,7 @@ class PRDSprintsOneToFiveTests(TestCase):
             data=json.dumps({'instance': session.instance_name, 'event': 'connection.update', 'data': {'state': 'open'}}),
             content_type='application/json', HTTP_X_ZAPFLUXO_SECRET='secret',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         session.refresh_from_db()
         self.assertEqual(session.state, 'CONNECTED')
 
@@ -65,6 +69,6 @@ class PRDSprintsOneToFiveTests(TestCase):
         first = PromptGeneratorService.save_version(empresa=self.company, user=self.user, data=data)
         second = PromptGeneratorService.save_version(empresa=self.company, user=self.user, data=data)
         self.assertEqual((first.version, second.version), (1, 2))
-        self.assertIn('# Identidade', second.content)
-        self.assertIn('# Restrições', second.content)
+        self.assertIn('# [IDENTIDADE]', second.content)
+        self.assertIn('# [REGRAS DE CONDUTA]', second.content)
         self.assertEqual(AIPromptVersion.objects.filter(profile__empresa=self.company).count(), 2)

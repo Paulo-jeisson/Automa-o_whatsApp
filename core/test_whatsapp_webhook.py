@@ -13,6 +13,7 @@ from .models import (
     EmpresaCliente,
     FluxoAtendimento,
     Mensagem,
+    WhatsAppSession,
     WhatsAppIntegration,
 )
 from .services.whatsapp.parser import parse_webhook_payload
@@ -74,6 +75,9 @@ class WhatsAppWebhookTests(TestCase):
             company=company,
             phone_number_id=phone_number_id,
             whatsapp_business_account_id=f'waba-{phone_number_id}',
+        )
+        WhatsAppSession.objects.create(
+            empresa=company, instance_name=f'evo-{username}', state='CONNECTED',
         )
         return company, integration
 
@@ -319,8 +323,8 @@ class WhatsAppWebhookTests(TestCase):
         self.assertEqual(Atendimento.objects.filter(empresa=company).count(), 1)
         self.assertEqual(Mensagem.objects.filter(empresa=company).count(), 1)
 
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.mark_as_read')
-    @patch('core.services.whatsapp.outbound.WhatsAppCloudClient.send_text')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
     def test_duplicate_inbound_triggers_only_one_auto_reply(self, send_mock, _read_mock):
         company, _integration = self.create_integration()
         FluxoAtendimento.objects.create(
@@ -461,12 +465,15 @@ class WhatsAppIntegrationPanelTests(TestCase):
         )
         self.client.login(username='painel-a', password='senha-segura')
 
-    def test_settings_show_integration_without_access_token(self):
+    def test_settings_hides_legacy_meta_identifiers_and_tokens(self):
         with override_settings(META_ACCESS_TOKEN='token-que-nao-pode-aparecer'):
             response = self.client.get(reverse('configuracoes'))
 
-        self.assertContains(response, '123456789')
-        self.assertContains(response, '987654321')
+        self.assertContains(response, 'Gerenciar WhatsApp')
+        self.assertNotContains(response, '123456789')
+        self.assertNotContains(response, '987654321')
+        self.assertNotContains(response, 'Phone Number ID')
+        self.assertNotContains(response, 'WABA ID')
         self.assertNotContains(response, 'token-que-nao-pode-aparecer')
 
     @patch('core.views.WhatsAppCloudClient')

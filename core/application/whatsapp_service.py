@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from core.domain.exceptions import ProviderUnavailable
 from core.domain.whatsapp import SessionState
-from core.infrastructure.evolution import EvolutionAPIProvider
+from core.infrastructure.evolution import EvolutionProvider
 from core.models import WhatsAppSession, WhatsAppSessionEvent
 
 logger = logging.getLogger('whatsapp.web_session')
@@ -14,7 +14,7 @@ logger = logging.getLogger('whatsapp.web_session')
 
 class WhatsAppSessionService:
     def __init__(self, provider=None):
-        self.provider = provider or EvolutionAPIProvider()
+        self.provider = provider or EvolutionProvider()
 
     @staticmethod
     def _event(session, kind, message='', payload=None):

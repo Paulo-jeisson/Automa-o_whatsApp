@@ -13,7 +13,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 from django.core.mail import send_mail
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from datetime import timedelta
 import hashlib
 from django.utils.crypto import constant_time_compare
@@ -21,6 +21,7 @@ import secrets
 
 from .forms import (
     AgendamentoForm,
+    CalendarConfigurationForm,
     AIConfigurationForm,
     CompanyInvitationForm,
     AtendimentoSimuladoForm,
@@ -61,6 +62,8 @@ from .models import (
     DataRetentionPolicy,
     DataSubjectRequest,
     MetaOnboardingVerification,
+    CalendarConfiguration,
+    WhatsAppSession,
 )
 from .services.scheduling import SchedulingService, SlotUnavailable
 from .services.whatsapp.embedded_signup import EmbeddedSignupService
@@ -222,7 +225,7 @@ def aceitar_convite(request, token):
     )
     if request.user.email.casefold() != invitation.email.casefold():
         messages.error(request, 'Entre com o e-mail que recebeu o convite.')
-        return redirect('dashboard')
+        return redirect('prompt_generator')
     CompanyMembership.objects.update_or_create(
         empresa=invitation.empresa, user=request.user,
         defaults={
@@ -232,7 +235,7 @@ def aceitar_convite(request, token):
     )
     invitation.accepted_at = timezone.now()
     invitation.save(update_fields=['accepted_at'])
-    return redirect('dashboard')
+    return redirect('prompt_generator')
 
 
 @login_required
@@ -311,25 +314,8 @@ def exclusao_dados(request):
 
 @login_required
 def dashboard(request):
-    empresa = company_for_user(request.user)
-    public_url = _public_attendance_url(request, empresa) if empresa else ''
-    hoje = timezone.localdate()
-    atendimentos = empresa.atendimentos.all() if empresa else Atendimento.objects.none()
-    context = {
-        'empresa': empresa,
-        'public_url': public_url,
-        'total_atendimentos': atendimentos.count(),
-        'atendimentos_hoje': atendimentos.filter(criado_em__date=hoje).count(),
-        'novos_atendimentos': atendimentos.filter(status=Atendimento.STATUS_NOVO).count(),
-        'ultimos_atendimentos': atendimentos[:5],
-        'status_conta': 'Ativa' if empresa and empresa.ativa else 'Pendente',
-        'agendamentos_hoje': empresa.agendamentos.filter(data=hoje).count() if empresa else 0,
-        'agendamentos_confirmados': empresa.agendamentos.filter(status=Agendamento.Status.CONFIRMED).count() if empresa else 0,
-        'agendamentos_pendentes': empresa.agendamentos.filter(status=Agendamento.Status.PENDING).count() if empresa else 0,
-        'aguardando_humano': atendimentos.filter(current_step=Atendimento.Step.WAITING_HUMAN).count(),
-        'atendimentos_ativos': atendimentos.exclude(status=Atendimento.STATUS_FINALIZADO).count(),
-    }
-    return render(request, 'core/dashboard.html', context)
+    company_for_user(request.user)
+    return redirect('prompt_generator')
 
 
 @login_required
@@ -365,10 +351,7 @@ def minha_empresa(request):
 @login_required
 def configuracoes(request):
     empresa = company_for_user(request.user)
-    whatsapp_integration = (
-        getattr(empresa, 'whatsapp_integration', None)
-        if empresa else None
-    )
+    whatsapp_session = WhatsAppSession.objects.filter(empresa=empresa).first() if empresa else None
 
     if request.method == 'POST':
         form = ConfiguracoesContaForm(request.POST, user=request.user)
@@ -387,13 +370,7 @@ def configuracoes(request):
         'empresa': empresa,
         'form': form,
         'status_conta': 'Ativa' if empresa and empresa.ativa else 'Pendente',
-        'provider_whatsapp': settings.WHATSAPP_PROVIDER,
-        'whatsapp_integration': whatsapp_integration,
-        'embedded_signup_ready': all([
-            settings.META_APP_ID,
-            settings.META_APP_SECRET,
-            settings.META_EMBEDDED_SIGNUP_CONFIG_ID,
-        ]),
+        'whatsapp_session': whatsapp_session,
     })
 
 
@@ -925,15 +902,25 @@ def _empresa_do_usuario(request):
 @login_required
 def agenda(request):
     empresa = _empresa_do_usuario(request)
-    start = request.GET.get('inicio') or timezone.localdate().isoformat()
-    end = request.GET.get('fim') or start
-    appointments = empresa.agendamentos.select_related('contato', 'servico').filter(data__range=(start, end))
-    status = request.GET.get('status', '')
-    if status in Agendamento.Status.values:
-        appointments = appointments.filter(status=status)
+    from core.application.calendar_configuration_service import CalendarConfigurationService
+    config = getattr(empresa, 'calendar_configuration', None)
+    initial = CalendarConfigurationService.initial_for(empresa) if config is None else None
+    form = CalendarConfigurationForm(request.POST or None, instance=config, initial=initial)
+    if request.method == 'POST' and form.is_valid():
+        try:
+            config = CalendarConfigurationService.save(empresa=empresa, data=form.cleaned_data)
+        except ValidationError as error:
+            form.add_error(None, error)
+        else:
+            record_audit(request, 'calendar.configuration_saved', empresa=empresa, target=config)
+            messages.success(request, 'Configuração do calendário salva.')
+            return redirect('agenda')
+    appointments = empresa.agendamentos.select_related('contato', 'servico').filter(
+        data__gte=timezone.localdate(), status__in=[Agendamento.Status.PENDING, Agendamento.Status.CONFIRMED],
+    ).order_by('data', 'hora_inicio')[:20]
     return render(request, 'core/agenda.html', {
-        'empresa': empresa, 'agendamentos': appointments, 'status_choices': Agendamento.Status.choices,
-        'filtros': {'inicio': start, 'fim': end, 'status': status},
+        'empresa': empresa, 'agendamentos': appointments, 'calendar_form': form,
+        'calendar_configuration': config,
     })
 
 

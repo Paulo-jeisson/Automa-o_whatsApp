@@ -5,10 +5,9 @@ from django.utils import timezone
 
 from core.models import (
     Agendamento, AppointmentReminder, Mensagem, ReminderConfiguration,
-    WhatsAppIntegration,
+    WhatsAppSession,
 )
-from core.services.whatsapp.client import WhatsAppCloudClient
-from core.services.whatsapp.tokens import access_token_for
+from core.infrastructure.evolution import EvolutionProvider
 
 
 class ReminderService:
@@ -64,28 +63,22 @@ class ReminderService:
                 return False
             appointment = locked.appointment
             config = appointment.empresa.reminder_configuration
-            integration = WhatsAppIntegration.objects.filter(
-                company=appointment.empresa, is_active=True,
+            session = WhatsAppSession.objects.filter(
+                empresa=appointment.empresa, state='CONNECTED',
             ).first()
-            if not integration:
+            if not session:
                 locked.status = AppointmentReminder.Status.FAILED
                 locked.error_code = 'NO_INTEGRATION'
                 locked.save(update_fields=['status', 'error_code'])
                 return False
             try:
-                result = WhatsAppCloudClient(
-                    phone_number_id=integration.phone_number_id,
-                    access_token=access_token_for(integration),
-                ).send_template(
-                    appointment.contato.whatsapp_id,
-                    template_name=config.template_name,
-                    language_code=config.language_code,
-                    parameters=[
-                        appointment.contato.nome or 'Cliente',
-                        appointment.servico.nome,
-                        appointment.data.strftime('%d/%m/%Y'),
-                        appointment.hora_inicio.strftime('%H:%M'),
-                    ],
+                text = (
+                    f'Olá, {appointment.contato.nome or "Cliente"}! '
+                    f'Lembrete do seu agendamento de {appointment.servico.nome} '
+                    f'em {appointment.data:%d/%m/%Y} às {appointment.hora_inicio:%H:%M}.'
+                )
+                result = EvolutionProvider().send_text(
+                    session.instance_name, appointment.contato.whatsapp_id, text,
                 )
             except Exception:
                 locked.status = AppointmentReminder.Status.FAILED

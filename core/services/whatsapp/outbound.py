@@ -1,14 +1,16 @@
 import logging
+import time
+import re
 
 from django.db import IntegrityError, transaction
 
-from core.models import FluxoAtendimento, Mensagem, WhatsAppIntegration
+from core.domain.exceptions import ProviderUnavailable
+from core.infrastructure.evolution import EvolutionProvider
+from core.models import FluxoAtendimento, Mensagem, WhatsAppSession, IgnoredPhoneNumber
 from core.services.ai.conversation import AIConversationService
 
-from .client import WhatsAppCloudClient
 from .exceptions import WhatsAppAPIError, WhatsAppProviderError
 from .flow_engine import FlowEngine
-from .tokens import access_token_for
 
 
 logger = logging.getLogger('whatsapp.outbound')
@@ -19,26 +21,22 @@ def send_text_for_attendance(atendimento, text):
     if contato is None or contato.empresa_id != atendimento.empresa_id:
         raise WhatsAppProviderError('O atendimento não possui um contato válido.')
 
-    integration = WhatsAppIntegration.objects.filter(
-        company_id=atendimento.empresa_id,
-        is_active=True,
-        company__ativa=True,
+    session = WhatsAppSession.objects.filter(
+        empresa_id=atendimento.empresa_id,
+        empresa__ativa=True,
+        state='CONNECTED',
     ).first()
-    if integration is None:
-        raise WhatsAppProviderError('A empresa não possui integração ativa.')
+    if session is None:
+        raise WhatsAppProviderError('A empresa não possui sessão Evolution conectada.')
 
     logger.info(
         'whatsapp.outbound.requested company_id=%s attendance_id=%s',
         atendimento.empresa_id,
         atendimento.pk,
     )
-    client = WhatsAppCloudClient(
-        phone_number_id=integration.phone_number_id,
-        access_token=access_token_for(integration),
-    )
     try:
-        result = client.send_text(contato.whatsapp_id, text)
-    except (WhatsAppAPIError, WhatsAppProviderError) as error:
+        result = EvolutionProvider().send_text(session.instance_name, contato.whatsapp_id, text)
+    except (ProviderUnavailable, WhatsAppAPIError) as error:
         logger.warning(
             'whatsapp.outbound.failed company_id=%s attendance_id=%s status_code=%s error_code=%s',
             atendimento.empresa_id,
@@ -46,7 +44,9 @@ def send_text_for_attendance(atendimento, text):
             getattr(error, 'status_code', None),
             getattr(error, 'error_code', ''),
         )
-        raise
+        if isinstance(error, WhatsAppAPIError):
+            raise
+        raise WhatsAppProviderError('Falha ao enviar mensagem pela Evolution API.') from error
 
     try:
         with transaction.atomic():
@@ -80,8 +80,6 @@ def send_automatic_reply(inbound_message):
     atendimento = inbound_message.atendimento
     if (
         inbound_message.direcao != Mensagem.DIRECAO_ENTRADA
-        or inbound_message.tipo != 'text'
-        or not inbound_message.texto
         or not atendimento.automation_enabled
     ):
         logger.info(
@@ -91,7 +89,32 @@ def send_automatic_reply(inbound_message):
         )
         return None
 
-    response_text = AIConversationService().reply(inbound_message=inbound_message)
+    sender = re.sub(r'\D', '', atendimento.contato.whatsapp_id if atendimento.contato else '')
+    if sender and IgnoredPhoneNumber.objects.filter(
+        empresa_id=inbound_message.empresa_id, phone_number=sender,
+    ).exists():
+        logger.info(
+            'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s reason=pass_number',
+            inbound_message.empresa_id, atendimento.pk,
+        )
+        return None
+
+    supported_text = inbound_message.tipo == 'text' and bool(inbound_message.texto)
+    response_text = AIConversationService().reply(inbound_message=inbound_message) if supported_text else None
+    ai_generated = response_text is not None
+    if not supported_text:
+        response_text = {
+            'image': 'Recebi sua imagem. Vou encaminhar para análise da equipe.',
+            'audio': 'Recebi seu áudio. No momento preciso encaminhá-lo para análise da equipe.',
+            'document': 'Recebi seu documento. Vou encaminhar para análise segura da equipe.',
+            'video': 'Recebi seu vídeo. Vou encaminhar para análise da equipe.',
+            'location': 'Recebi sua localização. Vou encaminhar para a equipe.',
+            'contact': 'Recebi o contato compartilhado. Vou encaminhar para a equipe.',
+        }.get(inbound_message.tipo, 'Recebi sua mensagem. Vou encaminhar para análise da equipe.')
+        logger.info(
+            'evolution.media.fallback company_id=%s attendance_id=%s type=%s',
+            inbound_message.empresa_id, atendimento.pk, inbound_message.tipo,
+        )
     if response_text is None:
         fluxo = FluxoAtendimento.objects.filter(empresa_id=inbound_message.empresa_id).first()
         if fluxo is None:
@@ -104,11 +127,15 @@ def send_automatic_reply(inbound_message):
         response_text = FlowEngine.process(atendimento, inbound_message)
     if not response_text:
         return None
+    if ai_generated:
+        profile = getattr(inbound_message.empresa, 'prompt_profile', None)
+        if profile and profile.response_delay_seconds:
+            time.sleep(profile.response_delay_seconds)
     try:
         with transaction.atomic():
             locked = type(atendimento).objects.select_for_update().get(pk=atendimento.pk)
             if (
-                locked.current_step in {locked.Step.HUMAN, locked.Step.FINISHED}
+                locked.current_step in {locked.Step.WAITING_HUMAN, locked.Step.HUMAN, locked.Step.FINISHED}
                 or locked.assigned_to_id
             ):
                 logger.info(
@@ -120,7 +147,7 @@ def send_automatic_reply(inbound_message):
     except (WhatsAppAPIError, WhatsAppProviderError):
         AIConversationService._handoff(
             atendimento,
-            'Falha ao enviar resposta pela WhatsApp Cloud API.',
+            'Falha ao enviar resposta pela Evolution API.',
         )
         return None
 
@@ -132,12 +159,12 @@ def send_automatic_reply(inbound_message):
     )
 
     try:
-        integration = atendimento.empresa.whatsapp_integration
-        WhatsAppCloudClient(
-            phone_number_id=integration.phone_number_id,
-            access_token=access_token_for(integration),
-        ).mark_as_read(inbound_message.external_message_id)
-    except (WhatsAppAPIError, WhatsAppProviderError):
+        session = WhatsAppSession.objects.get(empresa_id=atendimento.empresa_id)
+        remote_jid = f'{atendimento.contato.whatsapp_id}@s.whatsapp.net'
+        EvolutionProvider().mark_as_read(
+            session.instance_name, inbound_message.external_message_id, remote_jid,
+        )
+    except (ProviderUnavailable, WhatsAppSession.DoesNotExist):
         logger.info(
             'whatsapp.mark_as_read.failed company_id=%s message_id=%s',
             inbound_message.empresa_id,

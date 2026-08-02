@@ -1,0 +1,15 @@
+<div class="system-header-shell">
+  <section class="account-command-bar">
+    <div class="account-command-info"><strong>◉ VOCÊ TEM <b>{{ system_header_ai_count }} IA</b> ATIVA NO SEU NEGÓCIO</strong><small>ADQUIRA MAIS INSTÂNCIAS OU ACESSE A COMUNIDADE</small></div>
+    <div class="account-command-actions"><a class="command-btn cyan" href="{% url 'planos' %}">⚡ ADQUIRIR MAIS IAS</a><a class="command-btn green" href="#">♙ COMUNIDADE GRÁTIS</a><a class="command-btn amber" href="#">☆ COMUNIDADE VIP</a><a class="command-btn violet" href="{% url 'configuracoes' %}">⚐ TROCAR SENHA</a><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="command-btn red" type="submit">↪ SAIR</button></form><button class="command-btn theme" id="system-theme-toggle" type="button" aria-label="Alternar tema">☾</button></div>
+  </section>
+  <section class="atende-hero-panel">
+    <div class="atende-grid"></div><span class="system-live-badge {% if not system_header_session or system_header_session.state != 'CONNECTED' %}inactive{% endif %}">● SISTEMA {% if system_header_session.state == 'CONNECTED' %}ATIVO{% else %}INATIVO{% endif %}</span>
+    <h1><span>ATENDE</span><b>IA</b><small>2.0</small></h1><p>INTELIGÊNCIA ARTIFICIAL NO WHATSAPP PARA O SEU NEGÓCIO</p><i></i><div class="hero-status-dots"><span></span><span></span><span></span></div>
+  </section>
+  <section class="reference-card global-qr-card" id="whatsapp-qr">
+    <header><h2><span class="step-badge">PASSO 1</span><span>▯ CONECTAR WHATSAPP</span></h2><a class="btn btn-primary" href="#whatsapp-qr">◉ APRENDA A CONFIGURAR</a></header>
+    <div class="global-qr-stage">{% if system_header_session.qr_code %}<img src="{{ system_header_session.qr_code }}" alt="QR Code para conectar o WhatsApp">{% elif system_header_session.state == 'CONNECTED' %}<div class="global-connected-state">✓<strong>WHATSAPP CONECTADO</strong><small>{{ system_header_session.phone_number }}</small></div>{% else %}<div class="global-qr-placeholder"><span>QR</span><small>Gere um código para iniciar</small></div>{% endif %}</div>
+    <div class="global-qr-actions"><form method="post" action="{% url 'whatsapp_action' 'connect' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}#whatsapp-qr"><button class="btn btn-primary" type="submit">📱 GERAR QR CODE</button></form><form method="post" action="{% url 'whatsapp_action' 'clear' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}#whatsapp-qr"><button class="btn qr-clear-button" type="submit">LIMPAR SESSÃO E TENTAR</button></form></div><p class="global-qr-help">Se o QR não aparecer ou não conectar, use “Limpar sessão e tentar”</p>
+  </section>
+</div>

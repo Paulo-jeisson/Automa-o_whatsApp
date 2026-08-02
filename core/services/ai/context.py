@@ -17,6 +17,7 @@ class CompanyAIContext:
     cancellation_rules: str
     service_rules: str
     allowed_information: str
+    saved_system_prompt: str
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class AIConversationContext:
 
 def build_company_context(configuration):
     """Converte um modelo já autorizado em dados imutáveis para o agente."""
+    profile = getattr(configuration.empresa, 'prompt_profile', None)
     return CompanyAIContext(
         company_id=configuration.empresa_id,
         company_name=configuration.empresa.nome,
@@ -46,6 +48,7 @@ def build_company_context(configuration):
         cancellation_rules=configuration.cancellation_rules,
         service_rules=configuration.service_rules,
         allowed_information=configuration.allowed_information,
+        saved_system_prompt=profile.generated_prompt if profile else '',
     )
 
 
