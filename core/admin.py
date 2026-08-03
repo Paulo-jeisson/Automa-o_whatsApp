@@ -30,6 +30,8 @@ from .models import (
     DataRetentionPolicy,
     DataSubjectRequest,
     MetaOnboardingVerification,
+    BusinessDataSource,
+    BusinessDataRecord,
 )
 
 admin.site.register(Servico)
@@ -54,6 +56,8 @@ admin.site.register(AIUsageRecord)
 admin.site.register(DataRetentionPolicy)
 admin.site.register(DataSubjectRequest)
 admin.site.register(MetaOnboardingVerification)
+admin.site.register(BusinessDataSource)
+admin.site.register(BusinessDataRecord)
 
 
 @admin.register(AIConfiguration)

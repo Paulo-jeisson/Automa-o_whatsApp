@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Dados do Negócio | IAATENDE{% endblock %}
+{% block body %}
+<main class="business-data-page">
+  <div class="business-data-container">
+    {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+
+    <header class="business-data-heading">
+      <div><span class="eyebrow">BASE ESTRUTURADA DA IA</span><h1>DADOS DO <b>NEGÓCIO</b></h1><p>Importe informações atualizadas e escolha exatamente quais colunas a IA pode usar nas respostas.</p></div>
+      <span class="data-security-badge">● ISOLADO POR EMPRESA</span>
+    </header>
+
+    <section class="business-data-grid">
+      <article class="reference-card data-import-card">
+        <h2><span>01</span> IMPORTAR PLANILHA</h2>
+        <p class="reference-tip">Aceita Excel (.xlsx) ou CSV, com até 10 MB e 10.000 registros. A primeira linha deve conter o nome das colunas.</p>
+        <form method="post" enctype="multipart/form-data" class="reference-form">{% csrf_token %}
+          {% for error in form.non_field_errors %}<div class="alert">{{ error }}</div>{% endfor %}
+          {% for field in form %}
+            <div class="reference-form-group {% if field.field.widget.input_type == 'checkbox' %}data-checkbox{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+              {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+            </div>
+          {% endfor %}
+          <button class="btn btn-primary" type="submit">⇧ IMPORTAR E DISPONIBILIZAR PARA A IA</button>
+        </form>
+      </article>
+
+      <article class="reference-card data-test-card">
+        <h2><span>02</span> TESTAR CONSULTA</h2>
+        <p class="reference-tip">Confira o que a IA conseguirá encontrar. Somente as colunas autorizadas são exibidas.</p>
+        <form method="get" class="data-search-form"><input name="q" value="{{ query }}" placeholder="Ex.: preço do tênis azul"><button class="btn btn-outline" type="submit">PESQUISAR</button></form>
+        <div class="data-results">
+          {% for record in results %}<article><header><strong>{{ record.source.name }}</strong><small>LINHA {{ record.row_number }}</small></header><dl>{% for key,value in record.visible_data.items %}<div><dt>{{ key }}</dt><dd>{{ value|default:"—" }}</dd></div>{% endfor %}</dl></article>
+          {% empty %}<div class="data-empty">{% if query %}Nenhum dado autorizado encontrado para “{{ query }}”.{% else %}Digite uma pergunta para testar os dados importados.{% endif %}</div>{% endfor %}
+        </div>
+      </article>
+    </section>
+
+    <section class="reference-card data-sources-card">
+      <h2><span>03</span> BASES IMPORTADAS</h2>
+      <div class="data-source-list">
+        {% for source in sources %}<article>
+          <div class="data-source-state {% if not source.is_active %}inactive{% endif %}"><i></i><span>{% if source.is_active %}ATIVA PARA A IA{% else %}DESATIVADA{% endif %}</span></div>
+          <div><strong>{{ source.name }}</strong><small>{{ source.get_data_type_display }} · {{ source.row_count }} registros · {{ source.updated_at|date:"d/m/Y H:i" }}</small><p>IA pode informar: {{ source.ai_visible_columns|join:", " }}</p></div>
+          <div class="data-source-actions"><form method="post" action="{% url 'dados_negocio_status' source.pk %}">{% csrf_token %}<button class="btn btn-outline" type="submit">{% if source.is_active %}DESATIVAR{% else %}ATIVAR{% endif %}</button></form><form method="post" action="{% url 'dados_negocio_excluir' source.pk %}">{% csrf_token %}<button class="btn data-delete" type="submit">EXCLUIR</button></form></div>
+        </article>{% empty %}<div class="data-empty">Nenhuma planilha importada.</div>{% endfor %}
+      </div>
+    </section>
+  </div>
+</main>
+{% endblock %}

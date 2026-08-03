@@ -2,66 +2,54 @@
 
 {% block title %}ZapFluxo | Atendimento organizado pelo WhatsApp{% endblock %}
 
+{% block system_navigation %}{% endblock %}
+
 {% block body %}
 <div class="landing-page">
   <header class="landing-header">
     <div class="landing-container landing-nav">
-      <a class="landing-brand" href="{% url 'landing_page' %}" aria-label="ZapFluxo, início">
-        <span class="brand-mark">Z</span>
-        <span>ZapFluxo</span>
+      <a class="landing-brand ia-atende-brand" href="{% url 'landing_page' %}" aria-label="IA Atende, início">
+        <span><em>IA</em> ATENDE</span><b>2.0</b>
       </a>
-      <nav class="landing-nav-links" aria-label="Navegação principal">
-        <a href="#como-funciona">Como funciona</a>
-        <a href="#segmentos">Segmentos</a>
-        <a href="#planos">Planos</a>
-      </nav>
-      <div class="landing-account-actions"><a class="btn btn-primary" href="{% url 'cadastro' %}">Criar conta</a><a class="btn btn-outline landing-login" href="{% url 'login' %}">Entrar no painel</a></div>
+      <div class="landing-account-actions"><a class="btn landing-trial-button" href="{% url 'login' %}"><strong>TESTAR GRÁTIS — 3 DIAS</strong><small>SEM CARTÃO DE CRÉDITO</small></a></div>
     </div>
   </header>
 
   <main>
+    <span class="sr-only">Segmentos</span>
     <section class="landing-hero">
       <div class="landing-container hero-grid">
         <div class="hero-copy">
-          <span class="landing-kicker hero-badge">Atendimento simples. Negócio organizado.</span>
-          <h1><span class="sr-only">Organize seus atendimentos do WhatsApp sem trocar seu sistema atual.</span><span class="line-main" aria-hidden="true">Organize seus atendimentos</span><span class="line-accent" aria-hidden="true">do WhatsApp</span><span class="line-dim" aria-hidden="true">sem trocar seu sistema atual.</span></h1>
-          <p>Receba pedidos, dúvidas e contatos em um painel simples. Cada novo atendimento chega organizado e o responsável é avisado pelo WhatsApp.</p>
-          <div class="hero-actions">
-            {% if whatsapp_url %}
-              <a class="btn btn-primary btn-large" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Falar com um especialista</a>
-            {% else %}
-              <a class="btn btn-primary btn-large" href="#planos">Conhecer os planos</a>
-            {% endif %}
-            <a class="btn btn-outline btn-large" href="#como-funciona">Ver como funciona</a>
-          </div>
-          <div class="hero-trust" aria-label="Benefícios rápidos">
-            <span>✓ Sem instalação complexa</span>
-            <span>✓ Pronto para celular</span>
-          </div>
+          <h1><span class="sr-only">Organize seus atendimentos do WhatsApp com uma IA respondendo 24 horas sem você estar presente.</span><span class="line-main" aria-hidden="true">Seu WhatsApp</span><span class="line-accent" aria-hidden="true">respondendo<br>24h</span><span class="line-main" aria-hidden="true">sem você estar<br>presente.</span></h1>
+          <p class="hero-service-line">Responde. Qualifica.<br>Agenda. Enquanto você<br>descansa.</p>
+          <p class="hero-summary">A IA responde, qualifica e agenda. <strong>Você chega de manhã<br>com as conversas já resolvidas.</strong></p>
+          <div class="hero-trust" aria-label="Condições do teste"><span>Sem cartão de crédito</span><i>·</i><strong>Acesso completo imediato</strong><i>·</i><span>Sem compromisso</span></div>
         </div>
 
         <div class="hero-preview hero-terminal" aria-label="Prévia do atendimento ZapFluxo">
           <div class="terminal-bar">
             <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
-            <span class="terminal-title">ZAPFLUXO // ATENDIMENTO AO VIVO</span>
+            <span class="terminal-title">IA ATENDE 2.0 WHATSAPP ONLINE</span>
           </div>
           <div class="terminal-body">
             <div class="terminal-message bot-message">
-              <span class="terminal-avatar ai-avatar">Z</span>
-              <div><div class="terminal-bubble">Olá! Como posso ajudar você hoje?</div><small>Assistente IA · agora</small></div>
+              <span class="terminal-avatar ai-avatar">IA</span>
+              <div><div class="terminal-bubble">Olá! Sou a Bia, assistente virtual da Clínica Sorriso Bonito. Como posso te ajudar hoje? 😊</div><small>Agora · Entregue</small></div>
             </div>
             <div class="terminal-message user-message">
-              <span class="terminal-avatar user-avatar">MS</span>
-              <div><div class="terminal-bubble">Gostaria de agendar um atendimento.</div><small>Marina · agora</small></div>
+              <span class="terminal-avatar user-avatar">●</span>
+              <div><div class="terminal-bubble">Vocês fazem clareamento dental?<br>Quanto custa?</div><small>Agora</small></div>
             </div>
             <div class="terminal-message bot-message">
-              <span class="terminal-avatar ai-avatar">Z</span>
-              <div><div class="terminal-bubble">Perfeito. Tenho horários disponíveis ainda hoje.</div><small>Assistente IA · digitando</small></div>
+              <span class="terminal-avatar ai-avatar">IA</span>
+              <div><div class="terminal-bubble">Sim! Fazemos clareamento de vários tipos. Os valores são a partir de R$350. Quer saber mais ou agendar uma avaliação conosco? 🦷</div><small>Agora · Entregue</small></div>
             </div>
+            <div class="terminal-message bot-message typing-message"><span class="terminal-avatar ai-avatar">IA</span><div class="terminal-bubble"><i></i><i></i><i></i></div></div>
           </div>
-          <div class="terminal-status"><span><i></i> Sistema online</span><small>3 mensagens processadas</small></div>
+          <div class="terminal-status"><span><i></i> IA ATIVA RESPONDENDO</span><small>247 msgs hoje</small></div>
         </div>
       </div>
+      <a class="hero-floating-cta" href="{% url 'login' %}"><strong>⚡&nbsp; Testar agora — sem cartão</strong><small>GRÁTIS POR 3 DIAS</small></a>
     </section>
 
     <section class="landing-section" id="como-funciona">
@@ -136,7 +124,7 @@
             <span class="plan-period">Mensal</span>
             <div class="price compact-price"><strong><small>R$</small>147</strong></div>
             <p class="plan-caption">por mês · renovação<br>automática</p>
-            {% if whatsapp_url %}<a class="btn btn-outline btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Assinar</a>{% else %}<a class="btn btn-outline btn-block" href="{% url 'cadastro' %}">Começar teste</a>{% endif %}
+            <button class="btn btn-outline btn-block" type="button">Começar teste</button>
           </article>
           <article class="landing-card pricing-card pricing-card-compact annual-plan featured">
             <span class="popular-badge">Popular</span>
@@ -144,7 +132,7 @@
             <div class="price compact-price"><strong><small>R$</small>997</strong></div>
             <p class="installment">12x de R$83,08</p>
             <p class="plan-saving">Economize R$767 vs mensal</p>
-            {% if whatsapp_url %}<a class="btn btn-success btn-block" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Assinar</a>{% else %}<a class="btn btn-success btn-block" href="{% url 'cadastro' %}">Começar teste</a>{% endif %}
+            <button class="btn btn-success btn-block" type="button">Começar teste</button>
           </article>
         </div>
         <p class="pricing-guarantee">Garantia de 7 dias · Sem fidelidade · Cancele quando quiser</p>
@@ -163,6 +151,7 @@
     <div class="landing-container">
       <a class="landing-brand" href="{% url 'landing_page' %}"><span class="brand-mark">Z</span><span>ZapFluxo</span></a>
       <p>Atendimentos organizados. Negócios mais ágeis.</p>
+      <a href="{% url 'login' %}">Entrar no painel</a>
       <span>© {% now "Y" %} ZapFluxo</span>
     </div>
   </footer>

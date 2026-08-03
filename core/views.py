@@ -37,6 +37,7 @@ from .forms import (
     DataRetentionPolicyForm,
     DataSubjectRequestForm,
     MetaOnboardingVerificationForm,
+    BusinessDataImportForm,
 )
 from .models import (
     Agendamento,
@@ -65,7 +66,10 @@ from .models import (
     MetaOnboardingVerification,
     CalendarConfiguration,
     WhatsAppSession,
+    BusinessDataSource,
+    BusinessDataRecord,
 )
+from .services.business_data import import_business_data
 from .services.scheduling import SchedulingService, SlotUnavailable
 from .services.whatsapp.embedded_signup import EmbeddedSignupService
 from .services.whatsapp import (
@@ -439,6 +443,68 @@ def base_conhecimento_excluir(request, article_id):
     article.delete()
     messages.success(request, 'Conteúdo removido.')
     return redirect('base_conhecimento')
+
+
+@login_required
+def dados_negocio(request):
+    empresa = _empresa_do_usuario(request)
+    query = request.GET.get('q', '').strip()
+    results = BusinessDataRecord.objects.none()
+    if query:
+        terms = [term.casefold() for term in query.split() if len(term) >= 2][:8]
+        filters = Q()
+        for term in terms:
+            filters &= Q(searchable_text__icontains=term)
+        if terms:
+            results = BusinessDataRecord.objects.filter(
+                filters, empresa=empresa, source__is_active=True,
+            ).select_related('source')[:30]
+
+    if request.method == 'POST':
+        form = BusinessDataImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                source = import_business_data(
+                    empresa=empresa, user=request.user,
+                    name=form.cleaned_data['name'], data_type=form.cleaned_data['data_type'],
+                    uploaded=form.cleaned_data['spreadsheet'],
+                    visible_columns=form.cleaned_data['ai_visible_columns'],
+                    replace_existing=form.cleaned_data['replace_existing'],
+                )
+            except ValidationError as error:
+                form.add_error(None, error)
+            else:
+                record_audit(request, 'business_data.imported', empresa=empresa, target=source, metadata={'rows': source.row_count})
+                messages.success(request, f'{source.row_count} registros importados com sucesso.')
+                return redirect('dados_negocio')
+    else:
+        form = BusinessDataImportForm()
+    return render(request, 'core/dados_negocio.html', {
+        'empresa': empresa, 'form': form, 'sources': BusinessDataSource.objects.filter(empresa=empresa),
+        'query': query, 'results': results,
+    })
+
+
+@login_required
+@require_POST
+def dados_negocio_status(request, source_id):
+    empresa = _empresa_do_usuario(request)
+    source = get_object_or_404(BusinessDataSource, pk=source_id, empresa=empresa)
+    source.is_active = not source.is_active
+    source.save(update_fields=['is_active', 'updated_at'])
+    record_audit(request, 'business_data.status_changed', empresa=empresa, target=source, metadata={'active': source.is_active})
+    return redirect('dados_negocio')
+
+
+@login_required
+@require_POST
+def dados_negocio_excluir(request, source_id):
+    empresa = _empresa_do_usuario(request)
+    source = get_object_or_404(BusinessDataSource, pk=source_id, empresa=empresa)
+    record_audit(request, 'business_data.deleted', empresa=empresa, target=source)
+    source.delete()
+    messages.success(request, 'Base de dados removida.')
+    return redirect('dados_negocio')
 
 
 @login_required

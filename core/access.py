@@ -41,6 +41,9 @@ class RolePermissionMiddleware:
     PERMISSIONS = {
         'minha_empresa': 'manage_company',
         'configuracao_ia': 'manage_company',
+        'dados_negocio': 'manage_company',
+        'dados_negocio_status': 'manage_company',
+        'dados_negocio_excluir': 'manage_company',
         'whatsapp_onboarding': 'manage_company',
         'whatsapp_desconectar': 'manage_company',
         'fluxo': 'manage_company',

@@ -8,11 +8,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Syne+Mono&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'core/css/app.css' %}?v=neural-os-8">
+  <link rel="stylesheet" href="{% static 'core/css/app.css' %}?v=ia-atende-1">
 </head>
 <body>
-  {% if request.user.is_authenticated and system_header_company %}{% include "core/_system_header.html" %}{% endif %}
-  {% if request.user.is_authenticated %}{% include "core/_ai_reference_tabs.html" %}{% endif %}
+  {% block system_navigation %}
+    {% if request.user.is_authenticated and system_header_company %}{% include "core/_system_header.html" %}{% endif %}
+    {% if request.user.is_authenticated %}{% include "core/_ai_reference_tabs.html" %}{% endif %}
+  {% endblock %}
   <div id="system-page-content">{% block body %}{% endblock %}</div>
   {% if request.user.is_authenticated %}<script>(()=>{const b=document.querySelector('#system-theme-toggle');b?.addEventListener('click',()=>{document.documentElement.classList.toggle('theme-light');localStorage.setItem('neural-theme',document.documentElement.classList.contains('theme-light')?'light':'dark')});if(localStorage.getItem('neural-theme')==='light')document.documentElement.classList.add('theme-light')})();</script>{% endif %}
   <script>(()=>{const content=document.querySelector('#system-page-content');const menu=document.querySelector('#system-menu');if(!content||!menu)return;const runScripts=host=>host.querySelectorAll('script').forEach(old=>{const fresh=document.createElement('script');[...old.attributes].forEach(a=>fresh.setAttribute(a.name,a.value));fresh.textContent=old.textContent;old.replaceWith(fresh)});document.addEventListener('click',async event=>{const link=event.target.closest('#system-menu a');if(!link||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();const scrollPosition=window.scrollY;try{const response=await fetch(link.href,{headers:{'X-Requested-With':'ZapFluxo-Menu'}});if(!response.ok)throw new Error('navigation failed');const page=new DOMParser().parseFromString(await response.text(),'text/html');const nextContent=page.querySelector('#system-page-content');const nextMenu=page.querySelector('#system-menu');const nextScripts=page.querySelector('#system-page-scripts');if(!nextContent||!nextMenu)throw new Error('invalid page');content.innerHTML=nextContent.innerHTML;menu.innerHTML=nextMenu.innerHTML;const scripts=document.querySelector('#system-page-scripts');if(scripts){scripts.innerHTML=nextScripts?nextScripts.innerHTML:'';runScripts(scripts)}document.title=page.title;history.pushState({menu:true},'',response.url);window.scrollTo(0,scrollPosition)}catch(_){window.location.assign(link.href)}});window.addEventListener('popstate',()=>window.location.reload())})();</script>

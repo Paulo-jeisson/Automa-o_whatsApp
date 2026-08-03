@@ -8,7 +8,7 @@ from .models import (
     Agendamento, AIConfiguration, Atendimento, BloqueioAgenda, Contato, DisponibilidadeSemanal,
     EmpresaCliente, FluxoAtendimento, Servico,
     CompanyInvitation, CompanyMembership, ReminderConfiguration, KnowledgeBaseArticle,
-    DataRetentionPolicy, DataSubjectRequest,
+    DataRetentionPolicy, DataSubjectRequest, BusinessDataSource,
     MetaOnboardingVerification, CalendarConfiguration,
 )
 
@@ -116,6 +116,34 @@ class KnowledgeBaseArticleForm(forms.ModelForm):
 
     def clean_content_type(self):
         return self.cleaned_data.get('content_type') or KnowledgeBaseArticle.ContentType.FAQ
+
+
+class BusinessDataImportForm(forms.Form):
+    name = forms.CharField(label='Nome da base', max_length=120, help_text='Ex.: Catálogo de agosto')
+    data_type = forms.ChoiceField(label='Tipo de informação', choices=BusinessDataSource.DataType.choices)
+    spreadsheet = forms.FileField(label='Planilha Excel ou CSV')
+    ai_visible_columns = forms.CharField(
+        label='Colunas que a IA pode informar', max_length=1000,
+        help_text='Separe por vírgulas. Ex.: produto, preço, estoque. Colunas não listadas ficam privadas.',
+    )
+    replace_existing = forms.BooleanField(
+        label='Substituir uma base existente com o mesmo nome', required=False, initial=True,
+    )
+
+    def clean_spreadsheet(self):
+        uploaded = self.cleaned_data['spreadsheet']
+        suffix = uploaded.name.rsplit('.', 1)[-1].lower() if '.' in uploaded.name else ''
+        if suffix not in {'csv', 'xlsx'}:
+            raise forms.ValidationError('Envie um arquivo .xlsx ou .csv.')
+        if uploaded.size > 10 * 1024 * 1024:
+            raise forms.ValidationError('A planilha deve ter no máximo 10 MB.')
+        return uploaded
+
+    def clean_ai_visible_columns(self):
+        columns = [item.strip() for item in self.cleaned_data['ai_visible_columns'].split(',') if item.strip()]
+        if not columns:
+            raise forms.ValidationError('Informe ao menos uma coluna permitida para a IA.')
+        return list(dict.fromkeys(columns))
 
 
 class DataRetentionPolicyForm(forms.ModelForm):

@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import Agendamento, Atendimento, Servico, KnowledgeBaseArticle
+from core.models import Agendamento, Atendimento, Servico, KnowledgeBaseArticle, BusinessDataRecord
 from core.services.scheduling import SchedulingService, SlotUnavailable
 
 from .exceptions import AIToolError, AIToolValidationError
@@ -104,6 +104,15 @@ TOOL_DEFINITIONS = [
     {
         'type': 'function', 'name': 'pesquisar_base_conhecimento',
         'description': 'Pesquisa conteúdo administrado pela empresa antes de responder dúvidas específicas.',
+        'parameters': {
+            'type': 'object', 'properties': {'consulta': {'type': 'string'}},
+            'required': ['consulta'], 'additionalProperties': False,
+        },
+        'strict': True,
+    },
+    {
+        'type': 'function', 'name': 'pesquisar_dados_negocio',
+        'description': 'Pesquisa dados estruturados e atualizados importados pela empresa, como produtos, preços, estoque e serviços. Retorna somente colunas autorizadas para a IA.',
         'parameters': {
             'type': 'object', 'properties': {'consulta': {'type': 'string'}},
             'required': ['consulta'], 'additionalProperties': False,
@@ -294,6 +303,22 @@ class AIToolExecutor:
             {'id': item.pk, 'titulo': item.title, 'categoria': item.category, 'conteudo': item.content[:2000]}
             for item in articles
         ]}
+
+    def pesquisar_dados_negocio(self, *, consulta):
+        from django.db.models import Q
+        terms = [term.casefold() for term in str(consulta).strip().split() if len(term) >= 2][:8]
+        if not terms:
+            raise AIToolValidationError('Informe uma consulta mais específica.')
+        filters = Q()
+        for term in terms:
+            filters &= Q(searchable_text__icontains=term)
+        records = BusinessDataRecord.objects.filter(
+            filters, empresa=self.empresa, source__is_active=True,
+        ).select_related('source')[:10]
+        return {'resultados': [
+            {'base': item.source.name, 'tipo': item.source.data_type, 'dados': item.visible_data}
+            for item in records
+        ], 'orientacao': 'Responda somente com os dados retornados; se vazio, informe que não encontrou.'}
 
     def _customer_appointment(self, appointment_id, *, lock=False):
         if not self.atendimento.contato_id:

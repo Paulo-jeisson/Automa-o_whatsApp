@@ -899,6 +899,54 @@ class KnowledgeBaseArticle(models.Model):
         return self.title
 
 
+class BusinessDataSource(models.Model):
+    class DataType(models.TextChoices):
+        PRODUCT = 'PRODUCT', 'Produtos e estoque'
+        SERVICE = 'SERVICE', 'Serviços e valores'
+        ORDER = 'ORDER', 'Pedidos e ordens de serviço'
+        PROPERTY = 'PROPERTY', 'Imóveis'
+        CASE = 'CASE', 'Casos e processos'
+        OTHER = 'OTHER', 'Outros dados'
+
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='business_data_sources')
+    name = models.CharField('nome da base', max_length=120)
+    data_type = models.CharField('tipo de dados', max_length=16, choices=DataType.choices)
+    source_filename = models.CharField('arquivo de origem', max_length=255)
+    columns = models.JSONField('colunas importadas', default=list)
+    ai_visible_columns = models.JSONField('colunas permitidas para a IA', default=list)
+    row_count = models.PositiveIntegerField('registros importados', default=0)
+    is_active = models.BooleanField('disponível para a IA', default=True)
+    imported_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='business_data_imports')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        constraints = [models.UniqueConstraint(fields=['empresa', 'name'], name='unique_business_source_name_per_company')]
+
+    def __str__(self):
+        return self.name
+
+
+class BusinessDataRecord(models.Model):
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='business_data_records')
+    source = models.ForeignKey(BusinessDataSource, on_delete=models.CASCADE, related_name='records')
+    row_number = models.PositiveIntegerField()
+    data = models.JSONField(default=dict)
+    searchable_text = models.TextField(blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['row_number']
+        constraints = [models.UniqueConstraint(fields=['source', 'row_number'], name='unique_business_record_row')]
+        indexes = [models.Index(fields=['empresa', 'source'])]
+
+    @property
+    def visible_data(self):
+        allowed = set(self.source.ai_visible_columns or [])
+        return {key: value for key, value in self.data.items() if key in allowed}
+
+
 class AsyncJob(models.Model):
     class Status(models.TextChoices):
         PENDING = 'PENDING', 'Pendente'
