@@ -38,6 +38,7 @@ from .forms import (
     DataSubjectRequestForm,
     MetaOnboardingVerificationForm,
     BusinessDataImportForm,
+    AccountPasswordChangeForm,
 )
 from .models import (
     Agendamento,
@@ -355,28 +356,23 @@ def minha_empresa(request):
 
 @login_required
 def configuracoes(request):
+    return redirect('trocar_senha')
+
+
+@login_required
+def trocar_senha(request):
     empresa = company_for_user(request.user)
-    whatsapp_session = WhatsAppSession.objects.filter(empresa=empresa).first() if empresa else None
-
     if request.method == 'POST':
-        form = ConfiguracoesContaForm(request.POST, user=request.user)
+        form = AccountPasswordChangeForm(request.user, request.POST)
         if form.is_valid():
-            user, password_changed = form.save()
-            if password_changed:
-                update_session_auth_hash(request, user)
-                record_audit(request, 'account.password_changed', empresa=empresa)
-            record_audit(request, 'account.updated', empresa=empresa)
-            messages.success(request, 'Configurações da conta salvas com sucesso.')
-            return redirect('configuracoes')
+            user = form.save()
+            update_session_auth_hash(request, user)
+            record_audit(request, 'account.password_changed', empresa=empresa)
+            messages.success(request, 'Senha alterada com sucesso.')
+            return redirect('trocar_senha')
     else:
-        form = ConfiguracoesContaForm(user=request.user)
-
-    return render(request, 'core/configuracoes.html', {
-        'empresa': empresa,
-        'form': form,
-        'status_conta': 'Ativa' if empresa and empresa.ativa else 'Pendente',
-        'whatsapp_session': whatsapp_session,
-    })
+        form = AccountPasswordChangeForm(request.user)
+    return render(request, 'core/trocar_senha.html', {'form': form})
 
 
 @login_required

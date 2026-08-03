@@ -1,10 +1,10 @@
 <div class="system-header-shell">
   <section class="account-command-bar">
     <div class="account-command-info"><strong>◉ VOCÊ TEM <b>{{ system_header_ai_count }} IA</b> ATIVA NO SEU NEGÓCIO</strong><small>ADQUIRA MAIS INSTÂNCIAS OU ACESSE A COMUNIDADE</small></div>
-    <div class="account-command-actions"><a class="command-btn cyan" href="{% url 'planos' %}">⚡ ADQUIRIR MAIS IAS</a><a class="command-btn green" href="#">♙ COMUNIDADE GRÁTIS</a><a class="command-btn amber" href="#">☆ COMUNIDADE VIP</a><a class="command-btn violet" href="{% url 'configuracoes' %}">⚐ TROCAR SENHA</a><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="command-btn red" type="submit">↪ SAIR</button></form><button class="command-btn theme" id="system-theme-toggle" type="button" aria-label="Alternar tema">☾</button></div>
+    <div class="account-command-actions"><button class="command-btn cyan" type="button">⚡ ADQUIRIR MAIS IAS</button><button class="command-btn green" type="button">♙ COMUNIDADE GRÁTIS</button><button class="command-btn amber" type="button">☆ COMUNIDADE VIP</button><a class="command-btn violet" href="{% url 'trocar_senha' %}">⚐ TROCAR SENHA</a><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="command-btn red" type="submit">↪ SAIR</button></form><button class="command-btn theme" id="system-theme-toggle" type="button" aria-label="Alternar tema">☾</button></div>
   </section>
   <section class="atende-hero-panel">
-    <div class="atende-grid"></div><span class="system-live-badge {% if not system_header_session or system_header_session.state != 'CONNECTED' %}inactive{% endif %}">● SISTEMA {% if system_header_session.state == 'CONNECTED' %}ATIVO{% else %}INATIVO{% endif %}</span>
+    <div class="atende-grid"></div><span class="system-live-badge {% if not system_header_session.is_connected %}inactive{% endif %}">● SISTEMA {% if system_header_session.is_connected %}ATIVO{% else %}INATIVO{% endif %}</span>
     <h1><b>IA</b><span>ATENDE</span><small>2.0</small></h1><p>INTELIGÊNCIA ARTIFICIAL NO WHATSAPP PARA O SEU NEGÓCIO</p><i></i><div class="hero-status-dots"><span></span><span></span><span></span></div>
   </section>
   <section class="reference-card global-qr-card" id="whatsapp-qr">

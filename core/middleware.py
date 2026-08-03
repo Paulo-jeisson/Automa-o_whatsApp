@@ -125,5 +125,6 @@ class SecurityHeadersMiddleware:
         response.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
         response.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
         response.setdefault('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self'")
-        response.setdefault('Cache-Control', 'no-store' if request.user.is_authenticated else response.get('Cache-Control', ''))
+        user = getattr(request, 'user', None)
+        response.setdefault('Cache-Control', 'no-store' if user and user.is_authenticated else response.get('Cache-Control', ''))
         return response

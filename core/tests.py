@@ -159,14 +159,14 @@ class DashboardAccessTests(TestCase):
     @override_settings(PUBLIC_BASE_URL='https://public.example')
     def test_login_uses_the_new_menu_entry_screen(self):
         User = get_user_model()
-        user = User.objects.create_user(username='dono-ngrok', password='senha-segura')
+        user = User.objects.create_user(username='dono-ngrok', email='dono@example.com', password='senha-segura')
         company = EmpresaCliente.objects.create(usuario=user, nome='Empresa Ngrok')
         self.client.login(username='dono-ngrok', password='senha-segura')
 
         self.client.logout()
         response = self.client.post(
             reverse('login'),
-            {'username': 'dono-ngrok', 'password': 'senha-segura'},
+            {'username': 'dono@example.com', 'password': 'senha-segura', 'robot_check': 'on'},
         )
         self.assertRedirects(response, reverse('prompt_generator'))
 
@@ -244,58 +244,42 @@ class ConfiguracoesContaTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse('login'), response['Location'])
 
-    def test_user_can_update_own_profile(self):
+    def test_legacy_settings_redirects_to_password_screen(self):
         User = get_user_model()
         user = User.objects.create_user(username='conta', password='senha-segura')
         self.client.login(username='conta', password='senha-segura')
 
-        response = self.client.post(reverse('configuracoes'), {
-            'first_name': 'Paulo',
-            'last_name': 'Silva',
-            'email': 'paulo@example.com',
-            'new_password': '',
-            'confirm_password': '',
-        })
-
-        self.assertRedirects(response, reverse('configuracoes'))
-        user.refresh_from_db()
-        self.assertEqual(user.first_name, 'Paulo')
-        self.assertEqual(user.last_name, 'Silva')
-        self.assertEqual(user.email, 'paulo@example.com')
+        response = self.client.get(reverse('configuracoes'))
+        self.assertRedirects(response, reverse('trocar_senha'))
 
     def test_password_change_keeps_user_logged_in(self):
         User = get_user_model()
         user = User.objects.create_user(username='conta', password='senha-antiga')
         self.client.login(username='conta', password='senha-antiga')
 
-        response = self.client.post(reverse('configuracoes'), {
-            'first_name': '',
-            'last_name': '',
-            'email': '',
-            'new_password': 'senha-nova-segura',
-            'confirm_password': 'senha-nova-segura',
+        response = self.client.post(reverse('trocar_senha'), {
+            'old_password': 'senha-antiga',
+            'new_password1': 'senha-nova-segura',
+            'new_password2': 'senha-nova-segura',
         })
 
-        self.assertRedirects(response, reverse('configuracoes'))
+        self.assertRedirects(response, reverse('trocar_senha'))
         user.refresh_from_db()
         self.assertTrue(user.check_password('senha-nova-segura'))
-        self.assertEqual(self.client.get(reverse('configuracoes')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('trocar_senha')).status_code, 200)
 
     def test_mismatched_passwords_are_rejected(self):
         User = get_user_model()
         user = User.objects.create_user(username='conta', password='senha-antiga')
         self.client.login(username='conta', password='senha-antiga')
 
-        response = self.client.post(reverse('configuracoes'), {
-            'first_name': '',
-            'last_name': '',
-            'email': '',
-            'new_password': 'senha-nova-segura',
-            'confirm_password': 'senha-diferente',
+        response = self.client.post(reverse('trocar_senha'), {
+            'old_password': 'senha-antiga',
+            'new_password1': 'senha-nova-segura',
+            'new_password2': 'senha-diferente',
         })
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'As senhas informadas não são iguais.')
         user.refresh_from_db()
         self.assertTrue(user.check_password('senha-antiga'))
 

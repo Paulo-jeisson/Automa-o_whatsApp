@@ -1,40 +1,32 @@
 {% extends "base.html" %}
 
 {% block title %}Entrar | IAATENDE{% endblock %}
+{% block system_navigation %}{% endblock %}
 
 {% block body %}
 <main class="login-page">
   <section class="login-card" aria-label="Login">
-    <div class="login-brand">
-      <span class="brand-mark">IA</span>
-      <div>
-        <strong>IAATENDE</strong>
-        <small>Atendimento via WhatsApp para negócios locais</small>
-      </div>
-    </div>
-
-    <div class="login-heading">
-      <span class="eyebrow">Acesso do dono</span>
-      <h1>Entre no painel</h1>
-      <p>Organize seus atendimentos em uma área simples e segura.</p>
-    </div>
+    <div class="login-system-badge">●&nbsp; SISTEMA AVANÇADO</div>
+    <div class="login-heading login-heading-reference"><h1><span>IA</span>ATENDE <small>2.0</small></h1><p>ACESSO RESTRITO — AUTENTIQUE-SE PARA CONTINUAR</p></div>
 
     {% if form.errors %}
-      <div class="alert">Usuário ou senha inválidos.</div>
+      <div class="alert">E-mail, senha ou confirmação inválidos.</div>
     {% endif %}
 
     <form method="post" class="form-stack">
       {% csrf_token %}
-      <label for="{{ form.username.id_for_label }}">Usuário</label>
+      <label for="{{ form.username.id_for_label }}">E-mail</label>
       {{ form.username }}
 
       <label for="{{ form.password.id_for_label }}">Senha</label>
       {{ form.password }}
 
-      <button class="btn btn-primary" type="submit">Entrar</button>
+      <label class="robot-check" for="{{ form.robot_check.id_for_label }}">{{ form.robot_check }}<span>Não sou um robô</span></label>
+      {% for error in form.robot_check.errors %}<span class="field-error login-robot-error">{{ error }}</span>{% endfor %}
+
+      <button class="btn btn-primary login-submit" type="submit">↪&nbsp; ENTRAR</button>
     </form>
     <a class="login-back" href="{% url 'password_reset' %}">Esqueci minha senha</a>
-    <a class="login-back" href="{% url 'landing_page' %}">← Voltar para o site</a>
   </section>
 </main>
 {% endblock %}

@@ -41,15 +41,25 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_AGE = int(os.environ.get('SESSION_COOKIE_AGE', '3600'))
 SESSION_SAVE_EVERY_REQUEST = True
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_BACKEND = required('EMAIL_BACKEND')
 EMAIL_HOST = required('EMAIL_HOST')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_HOST_USER = required('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = required('EMAIL_HOST_PASSWORD')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in {'1', 'true', 'yes', 'on'}
 DEFAULT_FROM_EMAIL = required('DEFAULT_FROM_EMAIL')
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '20'))
+PASSWORD_RESET_TIMEOUT = int(os.environ.get('PASSWORD_RESET_TIMEOUT', '3600'))
+PUBLIC_BASE_URL = required('PUBLIC_BASE_URL').rstrip('/')
+if EMAIL_BACKEND != 'django.core.mail.backends.smtp.EmailBackend':
+    raise ImproperlyConfigured('EMAIL_BACKEND deve usar smtp.EmailBackend em produção.')
+if EMAIL_USE_TLS and os.environ.get('EMAIL_USE_SSL', 'False').lower() in {'1', 'true', 'yes', 'on'}:
+    raise ImproperlyConfigured('EMAIL_USE_TLS e EMAIL_USE_SSL não podem estar ativos ao mesmo tempo.')
+if PUBLIC_BASE_URL.startswith(('http://127.0.0.1', 'https://127.0.0.1', 'http://localhost', 'https://localhost')):
+    raise ImproperlyConfigured('PUBLIC_BASE_URL deve usar o domínio público em produção.')
 
 RATELIMIT_TRUST_PROXY = True
+PASSWORD_RESET_USE_REQUEST_DOMAIN = False
 
 if AI_ENABLED and not OPENAI_API_KEY:  # noqa: F405
     raise ImproperlyConfigured('OPENAI_API_KEY é obrigatória quando AI_ENABLED=True.')

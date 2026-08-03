@@ -14,7 +14,7 @@ from django.db.models import Q
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from core.access import company_for_user
+from core.access import company_for_user, ensure_company_for_user
 from core.application.dto import PromptGeneratorInput
 from core.application.prompt_compiler_service import PromptCompilerService
 from core.application.whatsapp_service import WhatsAppSessionService
@@ -117,7 +117,7 @@ def ai_dashboard(request):
 
 @login_required
 def prompt_generator(request):
-    empresa = _company(request)
+    empresa = ensure_company_for_user(request.user)
     profile = getattr(empresa, 'prompt_profile', None)
     initial = dict(profile.generator_data) if profile and profile.generator_data else {
         'company_name': empresa.nome, 'segment': empresa.get_segmento_display(),

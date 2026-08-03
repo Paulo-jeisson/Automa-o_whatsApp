@@ -2,6 +2,7 @@ import re
 
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth import get_user_model
 
 from .models import (
@@ -368,6 +369,12 @@ class ConfiguracoesContaForm(forms.Form):
             self.add_error('confirm_password', 'As senhas informadas não são iguais.')
         return cleaned_data
 
+    def clean_email(self):
+        email = self.cleaned_data.get('email', '').strip().lower()
+        if email and get_user_model().objects.filter(email__iexact=email).exclude(pk=self.user.pk).exists():
+            raise forms.ValidationError('Este e-mail já está em uso.')
+        return email
+
     def save(self):
         if self.user is None:
             raise ValueError('Um usuário é obrigatório para salvar as configurações.')
@@ -380,6 +387,21 @@ class ConfiguracoesContaForm(forms.Form):
             self.user.set_password(self.cleaned_data['new_password'])
         self.user.save()
         return self.user, password_changed
+
+
+class AccountPasswordChangeForm(PasswordChangeForm):
+    old_password = forms.CharField(
+        label='Senha atual', strip=False,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'current-password', 'autofocus': True}),
+    )
+    new_password1 = forms.CharField(
+        label='Nova senha', strip=False,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+    )
+    new_password2 = forms.CharField(
+        label='Confirmar nova senha', strip=False,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+    )
 
 
 class ServicoForm(forms.ModelForm):

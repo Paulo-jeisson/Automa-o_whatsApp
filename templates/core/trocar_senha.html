@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Trocar senha | IAATENDE{% endblock %}
+{% block body %}
+<main class="password-settings-page">
+  <section class="reference-card password-settings-card">
+    <header><span class="eyebrow">SEGURANÇA DA CONTA</span><h1>TROCAR <b>SENHA</b></h1><p>Defina uma senha nova para o acesso ao sistema.</p></header>
+    {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+    {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
+    <form method="post" class="reference-form">{% csrf_token %}
+      {% for field in form %}<div class="reference-form-group"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<small>{{ field.help_text|safe }}</small>{% endif %}{% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>{% endfor %}
+      <button class="btn btn-primary" type="submit">SALVAR NOVA SENHA</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

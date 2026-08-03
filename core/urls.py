@@ -33,6 +33,7 @@ urlpatterns = [
     path('atendimentos/<int:atendimento_id>/avisar-whatsapp/', views.avisar_whatsapp_atendimento, name='avisar_whatsapp_atendimento'),
     path('minha-empresa/', views.minha_empresa, name='minha_empresa'),
     path('configuracoes/', views.configuracoes, name='configuracoes'),
+    path('conta/trocar-senha/', views.trocar_senha, name='trocar_senha'),
     path('configuracoes/ia/', views.configuracao_ia, name='configuracao_ia'),
     path('configuracoes/base-conhecimento/', views.base_conhecimento, name='base_conhecimento'),
     path('configuracoes/base-conhecimento/<int:article_id>/excluir/', views.base_conhecimento_excluir, name='base_conhecimento_excluir'),

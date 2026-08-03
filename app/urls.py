@@ -26,21 +26,18 @@ from django.contrib.auth.views import (
 from django.urls import include, path
 
 from .health import health, live, ready
+from core.auth_views import EmailLoginView, ZapFluxoPasswordResetView
 
 urlpatterns = [
     path('health/', health, name='health'),
     path('health/live/', live, name='health_live'),
     path('health/ready/', ready, name='health_ready'),
     path('admin/', admin.site.urls),
-    path('login/', LoginView.as_view(template_name='registration/login.html'), name='login'),
+    path('login/', EmailLoginView.as_view(), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path(
         'senha/recuperar/',
-        PasswordResetView.as_view(
-            template_name='registration/password_reset_form.html',
-            email_template_name='registration/password_reset_email.txt',
-            subject_template_name='registration/password_reset_subject.txt',
-        ),
+        ZapFluxoPasswordResetView.as_view(),
         name='password_reset',
     ),
     path(

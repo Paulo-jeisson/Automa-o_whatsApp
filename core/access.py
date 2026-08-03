@@ -21,6 +21,23 @@ def company_for_user(user):
     return membership.empresa if membership else None
 
 
+def ensure_company_for_user(user):
+    empresa = company_for_user(user)
+    if empresa is not None:
+        return empresa
+    display_name = user.get_full_name().strip() or user.email or user.username
+    empresa, _ = EmpresaCliente.objects.get_or_create(
+        usuario=user,
+        defaults={
+            'nome': f'Espaço de {display_name}'[:120],
+            'segmento': EmpresaCliente.SEGMENTO_COMERCIO,
+            'nome_dono': display_name[:120],
+            'ativa': True,
+        },
+    )
+    return empresa
+
+
 def role_for_user(user, empresa):
     if empresa.usuario_id == user.id:
         return CompanyMembership.Role.OWNER
@@ -41,6 +58,7 @@ class RolePermissionMiddleware:
     PERMISSIONS = {
         'minha_empresa': 'manage_company',
         'configuracao_ia': 'manage_company',
+        'trocar_senha': 'manage_company',
         'dados_negocio': 'manage_company',
         'dados_negocio_status': 'manage_company',
         'dados_negocio_excluir': 'manage_company',

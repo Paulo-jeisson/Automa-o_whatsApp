@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from unittest.mock import patch
 
 from core.models import EmpresaCliente, WhatsAppSession
@@ -32,6 +33,19 @@ class SystemHeaderTests(TestCase):
         self.assertIn(f'href="{reverse("prompt_editor")}"', content)
         self.assertIn('id="system-page-content"', content)
         self.assertIn("ZapFluxo-Menu", content)
+
+    def test_system_is_active_only_after_qr_connection_is_confirmed(self):
+        session = WhatsAppSession.objects.create(
+            empresa=self.company, instance_name='header-validation', state='CONNECTED',
+        )
+        page = self.client.get(reverse('conversations_crm'))
+        self.assertContains(page, 'SISTEMA INATIVO')
+
+        session.connected_at = timezone.now()
+        session.save(update_fields=['connected_at'])
+        page = self.client.get(reverse('conversations_crm'))
+        self.assertContains(page, 'SISTEMA ATIVO')
+        self.assertNotContains(page, 'system-live-badge inactive')
 
     def test_header_never_uses_another_company_session(self):
         other_user = get_user_model().objects.create_user('header-other', password='safe-password')

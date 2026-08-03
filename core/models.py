@@ -1096,8 +1096,12 @@ class WhatsAppSession(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     @property
+    def is_connected(self):
+        return self.state == 'CONNECTED' and self.connected_at is not None and not self.qr_code
+
+    @property
     def online_seconds(self):
-        if not self.connected_at or self.state != 'CONNECTED':
+        if not self.is_connected:
             return 0
         return max(0, int((timezone.now() - self.connected_at).total_seconds()))
 
