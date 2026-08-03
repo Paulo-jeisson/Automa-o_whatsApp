@@ -476,9 +476,9 @@ class WhatsAppIntegrationPanelTests(TestCase):
 
     def test_settings_hides_legacy_meta_identifiers_and_tokens(self):
         with override_settings(META_ACCESS_TOKEN='token-que-nao-pode-aparecer'):
-            response = self.client.get(reverse('configuracoes'))
+            response = self.client.get(reverse('configuracoes'), follow=True)
 
-        self.assertContains(response, 'Gerenciar WhatsApp')
+        self.assertRedirects(response, reverse('trocar_senha'))
         self.assertNotContains(response, '123456789')
         self.assertNotContains(response, '987654321')
         self.assertNotContains(response, 'Phone Number ID')
@@ -489,10 +489,13 @@ class WhatsAppIntegrationPanelTests(TestCase):
     def test_integration_test_uses_company_phone_id_without_sending_message(self, client_class):
         response = self.client.post(reverse('testar_integracao_whatsapp'))
 
-        self.assertRedirects(response, reverse('configuracoes'))
+        self.assertRedirects(
+            response, reverse('configuracoes'), fetch_redirect_response=False,
+        )
         client_class.return_value.test_configuration.assert_called_once_with('123456789')
 
-    def test_user_cannot_test_another_company_integration(self):
+    @patch('core.views.WhatsAppCloudClient')
+    def test_user_cannot_test_another_company_integration(self, client_class):
         User = get_user_model()
         other_user = User.objects.create_user(username='painel-b', password='senha-segura')
         other_company = EmpresaCliente.objects.create(usuario=other_user, nome='Empresa Painel B')
@@ -505,4 +508,7 @@ class WhatsAppIntegrationPanelTests(TestCase):
 
         response = self.client.post(reverse('testar_integracao_whatsapp'))
 
-        self.assertRedirects(response, reverse('configuracoes'))
+        self.assertRedirects(
+            response, reverse('configuracoes'), fetch_redirect_response=False,
+        )
+        client_class.assert_not_called()

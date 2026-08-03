@@ -28,9 +28,9 @@ class PRDSprintTwelveTests(TestCase):
         with self.assertRaises(CommandError):
             call_command('release_check')
 
-    def test_commercial_cta_points_to_registration(self):
+    def test_commercial_cta_points_to_login(self):
         response = self.client.get(reverse('landing_page'))
-        self.assertContains(response, reverse('cadastro'))
+        self.assertContains(response, reverse('login'))
 
     def test_conversation_indexes_are_declared(self):
         fields = [tuple(index.fields) for index in Atendimento._meta.indexes]

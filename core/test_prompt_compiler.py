@@ -83,8 +83,8 @@ class PromptCompilerFlowTests(TestCase):
         ])).status_code, 404)
 
     def test_settings_exposes_only_evolution_session_summary(self):
-        page = self.client.get(reverse('configuracoes'))
-        self.assertContains(page, 'Gerenciar WhatsApp')
+        page = self.client.get(reverse('configuracoes'), follow=True)
+        self.assertRedirects(page, reverse('trocar_senha'))
         self.assertNotContains(page, 'Phone Number ID')
         self.assertNotContains(page, 'WABA ID')
         self.assertNotContains(page, 'Embedded Signup')

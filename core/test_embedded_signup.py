@@ -189,7 +189,9 @@ class EmbeddedSignupViewTests(TestCase):
             'phone_number_id': '1226385717231981',
         })
 
-        self.assertRedirects(response, reverse('configuracoes'))
+        self.assertRedirects(
+            response, reverse('configuracoes'), fetch_redirect_response=False,
+        )
         self.assertEqual(connect_mock.call_args.kwargs['empresa'], self.empresa)
 
     @patch('core.views.WhatsAppCloudClient')
@@ -205,7 +207,9 @@ class EmbeddedSignupViewTests(TestCase):
 
         response = self.client.post(reverse('testar_integracao_whatsapp'))
 
-        self.assertRedirects(response, reverse('configuracoes'))
+        self.assertRedirects(
+            response, reverse('configuracoes'), fetch_redirect_response=False,
+        )
         self.assertEqual(client_class.call_args.kwargs['access_token'], 'token-da-empresa-a')
         self.assertEqual(
             client_class.call_args.kwargs['phone_number_id'],
@@ -264,7 +268,10 @@ class EmbeddedSignupViewTests(TestCase):
                 follow=True,
             )
 
-        self.assertRedirects(response, reverse('configuracoes'))
+        self.assertEqual(response.redirect_chain, [
+            (reverse('configuracoes'), 302),
+            (reverse('trocar_senha'), 302),
+        ])
         self.assertContains(response, 'token inválido ou expirado')
         self.assertNotContains(response, 'token-que-nao-pode-aparecer')
 
@@ -278,7 +285,9 @@ class EmbeddedSignupViewTests(TestCase):
 
         response = self.client.post(reverse('testar_integracao_whatsapp'))
 
-        self.assertRedirects(response, reverse('configuracoes'))
+        self.assertRedirects(
+            response, reverse('configuracoes'), fetch_redirect_response=False,
+        )
 
     def test_decryption_error_redirects_safely(self):
         WhatsAppIntegration.objects.create(
@@ -291,7 +300,9 @@ class EmbeddedSignupViewTests(TestCase):
 
         response = self.client.post(reverse('testar_integracao_whatsapp'))
 
-        self.assertRedirects(response, reverse('configuracoes'))
+        self.assertRedirects(
+            response, reverse('configuracoes'), fetch_redirect_response=False,
+        )
 
 
 @override_settings(**META_SETTINGS, META_ACCESS_TOKEN='token-global-legado')
