@@ -487,12 +487,31 @@ class WhatsAppIntegrationPanelTests(TestCase):
 
     @patch('core.views.WhatsAppCloudClient')
     def test_integration_test_uses_company_phone_id_without_sending_message(self, client_class):
+        self.integration.set_access_token('token-da-empresa-a')
+        self.integration.save(update_fields=['access_token_encrypted'])
+        User = get_user_model()
+        other_user = User.objects.create_user(username='painel-b', password='senha-segura')
+        other_company = EmpresaCliente.objects.create(usuario=other_user, nome='Empresa Painel B')
+        WhatsAppIntegration.objects.create(
+            company=other_company,
+            phone_number_id='222222222',
+            whatsapp_business_account_id='333333333',
+            access_token_encrypted='token-invalido-que-nao-deve-ser-acessado',
+        )
+
         response = self.client.post(reverse('testar_integracao_whatsapp'))
 
         self.assertRedirects(
             response, reverse('configuracoes'), fetch_redirect_response=False,
         )
-        client_class.return_value.test_configuration.assert_called_once_with('123456789')
+        client_class.assert_called_once_with(
+            phone_number_id='123456789',
+            access_token='token-da-empresa-a',
+        )
+        cloud_client = client_class.return_value
+        cloud_client.test_configuration.assert_called_once_with('123456789')
+        cloud_client.send_text.assert_not_called()
+        cloud_client.send_template.assert_not_called()
 
     @patch('core.views.WhatsAppCloudClient')
     def test_user_cannot_test_another_company_integration(self, client_class):
