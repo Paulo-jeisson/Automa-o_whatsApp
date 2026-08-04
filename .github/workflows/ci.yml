@@ -9,6 +9,7 @@ jobs:
     env:
       DJANGO_SETTINGS_MODULE: app.settings_development
       DJANGO_SECRET_KEY: ci-only-secret-key
+      WHATSAPP_TOKEN_ENCRYPTION_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
