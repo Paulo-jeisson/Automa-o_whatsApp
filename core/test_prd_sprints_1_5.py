@@ -9,7 +9,8 @@ from core.application.dto import PromptGeneratorInput
 from core.application.prompt_service import PromptGeneratorService
 from core.application.whatsapp_service import WhatsAppSessionService
 from core.domain.whatsapp import SessionSnapshot, SessionState
-from core.models import AIPromptVersion, EmpresaCliente, WhatsAppSession
+from core.models import AIConfiguration, AIPromptVersion, AsyncJob, EmpresaCliente, WhatsAppSession
+from core.services.queue import process_job
 
 
 class PRDSprintsOneToFiveTests(TestCase):
@@ -51,8 +52,11 @@ class PRDSprintsOneToFiveTests(TestCase):
             content_type='application/json', HTTP_X_ZAPFLUXO_SECRET='secret',
         )
         self.assertEqual(response.status_code, 202)
+        job = AsyncJob.objects.get(task_name='evolution.webhook')
+        process_job(job.pk)
         session.refresh_from_db()
         self.assertEqual(session.state, 'CONNECTED')
+        self.assertTrue(AIConfiguration.objects.get(empresa=self.company).enabled)
 
     def test_ai_hub_and_generator_are_available(self):
         self.assertEqual(self.client.get(reverse('ai_dashboard')).status_code, 200)

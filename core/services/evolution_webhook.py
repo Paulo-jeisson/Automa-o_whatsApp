@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 import time
 from datetime import UTC, datetime
 
@@ -15,6 +14,7 @@ from core.models import Atendimento, Contato, Mensagem
 from core.services.entitlements import EntitlementService
 from core.services.observability import record_metric
 from core.services.queue import enqueue
+from core.services.phone_numbers import brazilian_phone_variants, normalize_phone_number
 
 
 logger = logging.getLogger('evolution.webhook')
@@ -51,6 +51,10 @@ class EvolutionWebhookService:
             idempotency_key=f'evolution:{instance_name}:{event_name}:{event_id}',
             queue='whatsapp', max_attempts=5,
         )
+        logger.info(
+            'whatsapp.webhook.enqueued company_id=%s instance=%s event=%s',
+            session.empresa_id, instance_name, event_name,
+        )
         return session
 
     @staticmethod
@@ -69,14 +73,28 @@ class EvolutionWebhookService:
         session = self.sessions.by_id(session_id)
         event_name = str(payload.get('event') or '').lower()
         data = payload.get('data') or {}
+        key = data.get('key') or {}
+        message_id = str(key.get('id') or data.get('id') or '')
+        logger.info(
+            'whatsapp.reply.begin company_id=%s message_id=%s event=%s message_type=%s stage=webhook',
+            session.empresa_id, message_id, event_name,
+            data.get('messageType') or self._detected_message_type(data.get('message') or {}),
+        )
         if 'qrcode' in event_name:
             self._qr_update(session, data)
+            self._reply_skip(session, message_id, 'internal_qr_event', event_name)
         elif 'connection' in event_name:
             self._connection_update(session, data)
+            self._reply_skip(session, message_id, 'internal_connection_event', event_name)
         elif 'messages.update' in event_name or 'send.message' in event_name:
             self._status_update(session, data)
+            status = str(data.get('status') or data.get('update', {}).get('status') or 'status').lower()
+            self._reply_skip(session, message_id, f'status_{status}', event_name)
         elif 'messages.upsert' in event_name or event_name in {'message', 'messages'}:
             self._message(session, data)
+        else:
+            reason = 'presence_event' if 'presence' in event_name else 'internal_evolution_event'
+            self._reply_skip(session, message_id, reason, event_name)
         session.events.create(
             kind=(event_name or 'WEBHOOK').upper()[:40],
             message='Evento Evolution processado.', payload=self._safe_event_payload(payload),
@@ -84,6 +102,25 @@ class EvolutionWebhookService:
         elapsed = (time.monotonic() - started) * 1000
         record_metric('evolution.webhook', empresa=session.empresa, value=elapsed, labels={'event': event_name, 'unit': 'ms'})
         logger.info('evolution.webhook.processed company_id=%s instance=%s event=%s latency_ms=%s', session.empresa_id, session.instance_name, event_name, round(elapsed))
+
+    @staticmethod
+    def _reply_skip(session, message_id, reason, event_name, attendance_id=None):
+        logger.info(
+            'whatsapp.reply.skip company_id=%s attendance_id=%s message_id=%s event=%s stage=webhook',
+            session.empresa_id, attendance_id, message_id, event_name,
+        )
+        logger.info(
+            'whatsapp.reply.reason company_id=%s attendance_id=%s message_id=%s reason=%s event=%s stage=webhook',
+            session.empresa_id, attendance_id, message_id, reason, event_name,
+        )
+        logger.info(
+            'whatsapp.reply.end company_id=%s attendance_id=%s message_id=%s outcome=ignored reason=%s stage=webhook',
+            session.empresa_id, attendance_id, message_id, reason,
+        )
+
+    @staticmethod
+    def _detected_message_type(message):
+        return next(iter(message), 'unknown') if isinstance(message, dict) else 'unknown'
 
     @staticmethod
     def _safe_event_payload(payload):
@@ -113,6 +150,9 @@ class EvolutionWebhookService:
                 session.qr_code = ''
             session.last_sync_at = timezone.now()
             session.save(update_fields=['state', 'connected_at', 'qr_code', 'last_sync_at', 'updated_at'])
+            if mapped == 'CONNECTED':
+                from core.services.ai.activation import auto_enable_company_ai
+                auto_enable_company_ai(session.empresa_id)
 
     @staticmethod
     def _status_update(session, data):
@@ -136,17 +176,32 @@ class EvolutionWebhookService:
 
     def _message(self, session, data):
         key = data.get('key') or {}
-        if key.get('fromMe'):
-            return None
         message_id = str(key.get('id') or data.get('id') or '')
-        remote_jid = str(key.get('remoteJid') or data.get('sender') or '')
-        if not message_id or '@g.us' in remote_jid:
+        if key.get('fromMe') or data.get('fromMe'):
+            self._reply_skip(session, message_id, 'message_from_me', 'messages.upsert')
             return None
-        whatsapp_id = re.sub(r'\D', '', remote_jid.split('@')[0])[:32]
+        remote_jid = str(key.get('remoteJid') or data.get('sender') or '')
+        if not message_id:
+            self._reply_skip(session, message_id, 'message_id_missing', 'messages.upsert')
+            return None
+        if '@g.us' in remote_jid:
+            self._reply_skip(session, message_id, 'group_message', 'messages.upsert')
+            return None
+        whatsapp_id = normalize_phone_number(remote_jid)
         if not whatsapp_id:
             raise EvolutionWebhookError('Remetente inválido.')
+        if (
+            session.phone_number
+            and brazilian_phone_variants(whatsapp_id)
+            & brazilian_phone_variants(session.phone_number)
+        ):
+            self._reply_skip(session, message_id, 'connected_number_message', 'messages.upsert')
+            return None
         message = data.get('message') or {}
-        message_type, text = self._message_content(message, data)
+        message_type, text, ignored_reason = self._message_content(message, data)
+        if ignored_reason:
+            self._reply_skip(session, message_id, ignored_reason, 'messages.upsert')
+            return None
         if message_type in SUPPORTED_MEDIA:
             try:
                 media = self.provider.download_media(session.instance_name, data)
@@ -197,9 +252,36 @@ class EvolutionWebhookService:
         except PermissionDenied:
             logger.warning('evolution.plan_limit company_id=%s', session.empresa_id)
             return None
+        from core.services.whatsapp.outbound import prequeue_auto_reply_reason
+        reason = prequeue_auto_reply_reason(
+            company_id=session.empresa_id,
+            phone_number=whatsapp_id,
+            atendimento=atendimento,
+        )
+        if reason:
+            logger.info(
+                'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s message_id=%s reason=%s',
+                session.empresa_id, atendimento.pk, message_id, reason,
+            )
+            self._reply_skip(
+                session, message_id, reason, 'messages.upsert', attendance_id=atendimento.pk,
+            )
+            return inbound
         enqueue(
             'whatsapp.automatic_reply', {'message_id': inbound.pk, 'company_id': session.empresa_id},
             idempotency_key=f'automatic-reply:{message_id}', queue='whatsapp', max_attempts=5,
+        )
+        logger.info(
+            'whatsapp.webhook.enqueued company_id=%s instance=%s event=automatic_reply message_id=%s',
+            session.empresa_id, session.instance_name, message_id,
+        )
+        logger.info(
+            'whatsapp.reply.reason company_id=%s attendance_id=%s message_id=%s reason=eligible_user_message type=%s stage=webhook',
+            session.empresa_id, atendimento.pk, message_id, message_type,
+        )
+        logger.info(
+            'whatsapp.reply.end company_id=%s attendance_id=%s message_id=%s outcome=enqueued stage=webhook',
+            session.empresa_id, atendimento.pk, message_id,
         )
         logger.info('evolution.message.persisted company_id=%s instance=%s contact_id=%s attendance_id=%s message_id=%s type=%s', session.empresa_id, session.instance_name, contato.pk, atendimento.pk, message_id, message_type)
         return inbound
@@ -207,10 +289,23 @@ class EvolutionWebhookService:
     @staticmethod
     def _message_content(message, data):
         if message.get('conversation'):
-            return 'text', str(message['conversation'])
+            return 'text', str(message['conversation']), None
         extended = message.get('extendedTextMessage') or {}
         if extended.get('text'):
-            return 'text', str(extended['text'])
+            return 'text', str(extended['text']), None
+        for key in ('listMessage', 'listResponseMessage', 'buttonsResponseMessage'):
+            item = message.get(key) or {}
+            if key in message:
+                selected = item.get('singleSelectReply') or {}
+                text = (
+                    item.get('title') or item.get('description')
+                    or item.get('selectedDisplayText') or selected.get('selectedRowId') or ''
+                )
+                return ('text', str(text), None) if text else (None, '', 'empty_list_message')
+        if 'protocolMessage' in message:
+            return None, '', 'protocol_message'
+        if 'reactionMessage' in message:
+            return None, '', 'reaction_message'
         mapping = {
             'imageMessage': 'image', 'audioMessage': 'audio',
             'documentMessage': 'document', 'videoMessage': 'video',
@@ -223,8 +318,11 @@ class EvolutionWebhookService:
                 caption = item.get('caption') or item.get('displayName') or ''
                 if kind == 'location':
                     caption = f"Localização: {item.get('degreesLatitude')}, {item.get('degreesLongitude')}"
-                return kind, str(caption)
-        return str(data.get('messageType') or 'unknown').replace('Message', '').lower()[:32], ''
+                return kind, str(caption), None
+        raw_type = str(data.get('messageType') or '').lower()
+        if raw_type in {'protocolmessage', 'reactionmessage'}:
+            return None, '', raw_type.replace('message', '_message')
+        return None, '', 'unsupported_or_empty_message'
 
     @staticmethod
     def _timestamp(value):

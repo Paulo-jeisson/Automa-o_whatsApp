@@ -10,6 +10,7 @@ from django.urls import reverse
 from .models import (
     AIConfiguration,
     AIPromptProfile,
+    AsyncJob,
     Atendimento,
     Contato,
     EmpresaCliente,
@@ -20,6 +21,7 @@ from .models import (
 )
 from .services.whatsapp.parser import parse_webhook_payload
 from .services.whatsapp.client import SendTextResult
+from .services.queue import process_job
 
 
 APP_SECRET = 'app-secret-de-teste'
@@ -348,6 +350,7 @@ class WhatsAppWebhookTests(TestCase):
 
         self.post_payload(webhook_payload())
         self.post_payload(webhook_payload())
+        process_job(AsyncJob.objects.get(task_name='whatsapp.automatic_reply').pk)
 
         send_mock.assert_called_once()
         self.assertEqual(Mensagem.objects.filter(direcao=Mensagem.DIRECAO_SAIDA).count(), 1)

@@ -1,5 +1,4 @@
 import logging
-import re
 from datetime import UTC, datetime
 
 from django.db import IntegrityError, transaction
@@ -48,6 +47,19 @@ def process_webhook_event(event: NormalizedWebhookEvent):
     if event.event_type == 'message':
         inbound_message, created = _persist_inbound_message(integration, event)
         if created:
+            from core.services.whatsapp.outbound import prequeue_auto_reply_reason
+            reason = prequeue_auto_reply_reason(
+                company_id=inbound_message.empresa_id,
+                phone_number=inbound_message.contato.whatsapp_id,
+                atendimento=inbound_message.atendimento,
+            )
+            if reason:
+                logger.info(
+                    'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s message_id=%s reason=%s',
+                    inbound_message.empresa_id, inbound_message.atendimento_id,
+                    inbound_message.external_message_id, reason,
+                )
+                return integration
             from core.services.queue import enqueue
             enqueue(
                 'whatsapp.automatic_reply', {
@@ -186,7 +198,8 @@ def _persist_inbound_message(integration, event):
 
 
 def _normalize_whatsapp_id(value):
-    return re.sub(r'\D', '', value or '')[:32]
+    from core.services.phone_numbers import normalize_phone_number
+    return normalize_phone_number(value)
 
 
 def _parse_meta_timestamp(value):

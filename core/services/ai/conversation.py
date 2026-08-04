@@ -31,7 +31,7 @@ class AIConversationService:
     def is_enabled(atendimento):
         try:
             configuration = AIConfiguration.objects.get(
-                empresa_id=atendimento.empresa_id, enabled=True,
+                empresa_id=atendimento.empresa_id,
             )
         except AIConfiguration.DoesNotExist:
             return None

@@ -62,10 +62,11 @@ admin.site.register(BusinessDataRecord)
 
 @admin.register(AIConfiguration)
 class AIConfigurationAdmin(admin.ModelAdmin):
-    list_display = ('empresa', 'enabled', 'assistant_name', 'updated_at')
-    list_filter = ('enabled', 'updated_at')
+    list_display = ('empresa', 'assistant_name', 'updated_at')
+    list_filter = ('updated_at',)
     search_fields = ('empresa__nome', 'assistant_name')
     autocomplete_fields = ('empresa',)
+    exclude = ('enabled',)
 
 
 @admin.register(AuditEvent)

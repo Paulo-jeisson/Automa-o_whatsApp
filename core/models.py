@@ -583,6 +583,14 @@ class IgnoredPhoneNumber(models.Model):
     def __str__(self):
         return self.name or self.phone_number
 
+    def save(self, *args, **kwargs):
+        from core.services.phone_numbers import normalize_phone_number
+        self.phone_number = normalize_phone_number(self.phone_number)
+        result = super().save(*args, **kwargs)
+        from core.services.pass_numbers import cancel_pending_auto_reply_jobs
+        cancel_pending_auto_reply_jobs(self.empresa_id, self.phone_number)
+        return result
+
 
 
 class BloqueioAgenda(models.Model):
@@ -731,7 +739,7 @@ class AIConfiguration(models.Model):
 
     @property
     def is_available(self):
-        return self.enabled and settings.AI_ENABLED and bool(settings.OPENAI_API_KEY)
+        return settings.AI_ENABLED and bool(settings.OPENAI_API_KEY)
 
     def __str__(self):
         return f'IA - {self.empresa.nome}'
@@ -1134,12 +1142,19 @@ class AIPromptVersion(models.Model):
     profile = models.ForeignKey(AIPromptProfile, on_delete=models.CASCADE, related_name='versions')
     version = models.PositiveIntegerField()
     content = models.TextField()
+    content_hash = models.CharField(max_length=64, blank=True)
+    is_active = models.BooleanField(default=False, db_index=True)
+    published_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-version']
         constraints = [models.UniqueConstraint(fields=['profile', 'version'], name='unique_ai_prompt_version')]
+        constraints += [models.UniqueConstraint(
+            fields=['profile'], condition=models.Q(is_active=True),
+            name='unique_active_ai_prompt_version_per_profile',
+        )]
 
 
 class AIPromptTemplate(models.Model):

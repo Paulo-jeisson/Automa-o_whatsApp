@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}ZapFluxo | Atendimento organizado pelo WhatsApp{% endblock %}
+{% block title %}IAATENDE | Atendimento organizado pelo WhatsApp{% endblock %}
 
 {% block system_navigation %}{% endblock %}
 
@@ -26,7 +26,7 @@
           <div class="hero-trust" aria-label="Condições do teste"><span>Sem cartão de crédito</span><i>·</i><strong>Acesso completo imediato</strong><i>·</i><span>Sem compromisso</span></div>
         </div>
 
-        <div class="hero-preview hero-terminal" aria-label="Prévia do atendimento ZapFluxo">
+        <div class="hero-preview hero-terminal" aria-label="Prévia do atendimento IAATENDE">
           <div class="terminal-bar">
             <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
             <span class="terminal-title">IA ATENDE 2.0 WHATSAPP ONLINE</span>
@@ -107,7 +107,7 @@
           <article><span>✓</span><div><strong>Nenhum contato esquecido</strong><p>Veja novos atendimentos e acompanhe o status de cada um.</p></div></article>
           <article><span>✓</span><div><strong>Configuração rápida</strong><p>Personalize mensagens e opções para a rotina do seu negócio.</p></div></article>
           <article><span>✓</span><div><strong>Acesso de qualquer lugar</strong><p>Painel responsivo para usar no celular ou no computador.</p></div></article>
-          <article><span>✓</span><div><strong>Sem mudar sua operação</strong><p>O ZapFluxo funciona de forma independente do seu sistema atual.</p></div></article>
+          <article><span>✓</span><div><strong>Sem mudar sua operação</strong><p>O IAATENDE funciona de forma independente do seu sistema atual.</p></div></article>
         </div>
       </div>
     </section>
@@ -141,7 +141,7 @@
 
     <section class="landing-cta">
       <div class="landing-container cta-inner">
-        <div><span class="landing-kicker">Comece agora</span><h2>Pronto para organizar seus atendimentos?</h2><p>Converse com a gente e veja como o ZapFluxo pode funcionar no seu negócio.</p></div>
+        <div><span class="landing-kicker">Comece agora</span><h2>Pronto para organizar seus atendimentos?</h2><p>Converse com a gente e veja como o IAATENDE pode funcionar no seu negócio.</p></div>
         {% if whatsapp_url %}<a class="btn btn-primary btn-large" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Falar no WhatsApp</a>{% else %}<a class="btn btn-primary btn-large" href="#planos">Ver planos</a>{% endif %}
       </div>
     </section>
@@ -149,10 +149,10 @@
 
   <footer class="landing-footer">
     <div class="landing-container">
-      <a class="landing-brand" href="{% url 'landing_page' %}"><span class="brand-mark">Z</span><span>ZapFluxo</span></a>
+      <a class="landing-brand" href="{% url 'landing_page' %}"><span class="brand-mark">Z</span><span>IAATENDE</span></a>
       <p>Atendimentos organizados. Negócios mais ágeis.</p>
       <a href="{% url 'login' %}">Entrar no painel</a>
-      <span>© {% now "Y" %} ZapFluxo</span>
+      <span>© {% now "Y" %} IAATENDE</span>
     </div>
   </footer>
 </div>

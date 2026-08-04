@@ -78,7 +78,6 @@ class AIConfigurationForm(forms.ModelForm):
     class Meta:
         model = AIConfiguration
         fields = [
-            'enabled',
             'assistant_name',
             'greeting',
             'tone',
@@ -122,10 +121,13 @@ class KnowledgeBaseArticleForm(forms.ModelForm):
 class BusinessDataImportForm(forms.Form):
     name = forms.CharField(label='Nome da base', max_length=120, help_text='Ex.: Catálogo de agosto')
     data_type = forms.ChoiceField(label='Tipo de informação', choices=BusinessDataSource.DataType.choices)
-    spreadsheet = forms.FileField(label='Planilha Excel ou CSV')
+    spreadsheet = forms.FileField(
+        label='Arquivo de dados ou documento',
+        help_text='CSV, XLSX, PDF, TXT, Markdown, JSON, XML ou HTML.',
+    )
     ai_visible_columns = forms.CharField(
-        label='Colunas que a IA pode informar', max_length=1000,
-        help_text='Separe por vírgulas. Ex.: produto, preço, estoque. Colunas não listadas ficam privadas.',
+        label='Colunas que a IA pode informar', max_length=1000, required=False,
+        help_text='Para planilhas, separe por vírgulas. Em documentos, deixe vazio para disponibilizar o texto extraído.',
     )
     replace_existing = forms.BooleanField(
         label='Substituir uma base existente com o mesmo nome', required=False, initial=True,
@@ -134,16 +136,18 @@ class BusinessDataImportForm(forms.Form):
     def clean_spreadsheet(self):
         uploaded = self.cleaned_data['spreadsheet']
         suffix = uploaded.name.rsplit('.', 1)[-1].lower() if '.' in uploaded.name else ''
-        if suffix not in {'csv', 'xlsx'}:
-            raise forms.ValidationError('Envie um arquivo .xlsx ou .csv.')
+        if suffix not in {'csv', 'xlsx', 'pdf', 'txt', 'md', 'json', 'xml', 'html', 'htm'}:
+            raise forms.ValidationError(
+                'Formato não suportado. Envie CSV, XLSX, PDF, TXT, Markdown, JSON, XML ou HTML.'
+            )
         if uploaded.size > 10 * 1024 * 1024:
-            raise forms.ValidationError('A planilha deve ter no máximo 10 MB.')
+            raise forms.ValidationError('O arquivo deve ter no máximo 10 MB.')
         return uploaded
 
     def clean_ai_visible_columns(self):
         columns = [item.strip() for item in self.cleaned_data['ai_visible_columns'].split(',') if item.strip()]
-        if not columns:
-            raise forms.ValidationError('Informe ao menos uma coluna permitida para a IA.')
+        if len(columns) == 1 and columns[0].casefold() in {'todas', 'todos', '*'}:
+            return []
         return list(dict.fromkeys(columns))
 
 

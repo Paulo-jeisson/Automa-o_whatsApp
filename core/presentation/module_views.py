@@ -4,6 +4,7 @@ import csv
 import re
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
@@ -157,16 +158,31 @@ def prompt_editor(request):
     empresa = _company(request)
     profile = PromptCompilerService.ensure_default_profile(empresa=empresa, user=request.user)
     if request.method == 'POST':
-        version = PromptCompilerService.save_editor_version(
-            empresa=empresa, user=request.user, content=request.POST.get('prompt_content'),
-            response_delay_seconds=request.POST.get('response_delay_seconds', 3),
-        )
-        messages.success(request, f'Prompt salvo como versão {version.version}.')
-        return redirect('prompt_editor')
+        try:
+            if request.POST.get('action') == 'draft':
+                PromptCompilerService.save_draft(
+                    empresa=empresa, content=request.POST.get('prompt_content'),
+                    response_delay_seconds=request.POST.get('response_delay_seconds', 3),
+                )
+                messages.success(request, 'Rascunho salvo. O prompt ativo não foi alterado.')
+            else:
+                version = PromptCompilerService.publish_editor_prompt(
+                    empresa=empresa, user=request.user, content=request.POST.get('prompt_content'),
+                    response_delay_seconds=request.POST.get('response_delay_seconds', 3),
+                )
+                messages.success(request, f'Prompt publicado como versão {version.version}.')
+            return redirect('prompt_editor')
+        except ValidationError as exc:
+            messages.error(request, '; '.join(exc.messages))
+            profile.refresh_from_db()
+    active_version = profile.versions.filter(is_active=True).first()
     return render(request, 'core/prompt_editor.html', {
         'empresa': empresa,
         'profile': profile,
-        'prompt': profile.draft_prompt or profile.generated_prompt,
+        'prompt': profile.generated_prompt,
+        'draft_prompt': profile.draft_prompt,
+        'active_version': active_version,
+        'has_unpublished_changes': profile.draft_prompt != profile.generated_prompt,
         'versions': profile.versions.all()[:30],
     })
 
@@ -176,12 +192,11 @@ def prompt_editor(request):
 def prompt_restore(request, version_id):
     empresa = _company(request)
     version = get_object_or_404(AIPromptVersion, pk=version_id, profile__empresa=empresa)
-    profile = version.profile
-    profile.generated_prompt = version.content
-    profile.save(update_fields=['generated_prompt', 'updated_at'])
-    messages.success(request, f'Versão {version.version} restaurada para edição.')
-    profile.draft_prompt = version.content
-    profile.save(update_fields=['draft_prompt', 'updated_at'])
+    restored = PromptCompilerService.publish_editor_prompt(
+        empresa=empresa, user=request.user, content=version.content,
+        response_delay_seconds=version.profile.response_delay_seconds,
+    )
+    messages.success(request, f'Versão {version.version} restaurada e publicada como versão {restored.version}.')
     return redirect('prompt_editor')
 
 
@@ -200,12 +215,11 @@ def prompt_autosave(request):
 def prompt_duplicate(request, version_id):
     empresa = _company(request)
     source = get_object_or_404(AIPromptVersion, pk=version_id, profile__empresa=empresa)
-    number = (source.profile.versions.order_by('-version').first().version) + 1
-    AIPromptVersion.objects.create(profile=source.profile, version=number, content=source.content, created_by=request.user)
-    messages.success(request, f'Versão {source.version} duplicada como {number}.')
-    source.profile.generated_prompt = source.content
-    source.profile.draft_prompt = source.content
-    source.profile.save(update_fields=['generated_prompt', 'draft_prompt', 'updated_at'])
+    version = PromptCompilerService.publish_editor_prompt(
+        empresa=empresa, user=request.user, content=source.content,
+        response_delay_seconds=source.profile.response_delay_seconds,
+    )
+    messages.success(request, f'Versão {source.version} duplicada e publicada como {version.version}.')
     return redirect('prompt_editor')
 
 
@@ -230,12 +244,14 @@ def prompt_export(request):
 def ignored_numbers(request):
     empresa = _company(request)
     if request.method == 'POST':
-        phone = re.sub(r'\D', '', request.POST.get('phone_number', ''))
+        from core.services.pass_numbers import store_pass_number
+        from core.services.phone_numbers import normalize_phone_number
+        phone = normalize_phone_number(request.POST.get('phone_number', ''))
         name = request.POST.get('name', '').strip()[:120]
         if not 10 <= len(phone) <= 15:
             messages.error(request, 'Informe um telefone com DDD e código do país.')
         else:
-            _, created = IgnoredPhoneNumber.objects.get_or_create(empresa=empresa, phone_number=phone, defaults={'name': name})
+            _, created = store_pass_number(company=empresa, phone_number=phone, name=name)
             messages.success(request, 'Número adicionado à lista Pass.') if created else messages.warning(request, 'Este número já está na lista.')
         return redirect('ignored_numbers')
     return render(request, 'core/ignored_numbers.html', {'empresa': empresa, 'ignored_numbers': empresa.ignored_phone_numbers.all()})

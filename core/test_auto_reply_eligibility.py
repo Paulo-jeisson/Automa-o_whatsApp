@@ -80,7 +80,7 @@ class AutomaticReplyEligibilityTests(TestCase):
         IgnoredPhoneNumber.objects.create(
             empresa=self.company, phone_number=self.contact.whatsapp_id, name='Bloqueado',
         )
-        self.assert_reason('blocked_number')
+        self.assert_reason('pass_number')
 
     def test_duplicate_reason(self):
         AsyncJob.objects.create(
@@ -95,17 +95,15 @@ class AutomaticReplyEligibilityTests(TestCase):
         self.session.save(update_fields=['state'])
         self.assert_reason('whatsapp_session_disconnected')
 
-    def test_no_active_prompt_reason(self):
+    def test_prompt_missing_reason(self):
         self.profile.generated_prompt = ''
         self.profile.save(update_fields=['generated_prompt'])
-        self.assert_reason('no_active_prompt')
+        self.assert_reason('prompt_missing')
 
-    def test_ai_disabled_and_unavailable_reasons(self):
+    def test_legacy_enabled_flag_is_ignored_and_global_unavailability_is_reported(self):
         self.configuration.enabled = False
         self.configuration.save(update_fields=['enabled'])
-        self.assert_reason('ai_disabled')
-        self.configuration.enabled = True
-        self.configuration.save(update_fields=['enabled'])
+        self.assertIsNone(automatic_reply_ineligibility(self.inbound))
         with override_settings(AI_ENABLED=False):
             self.assert_reason('ai_unavailable')
 
@@ -140,4 +138,3 @@ class AutomaticReplyEligibilityTests(TestCase):
         send_mock.assert_called_once_with(
             self.session.instance_name, self.contact.whatsapp_id, 'Resposta normal da IA',
         )
-

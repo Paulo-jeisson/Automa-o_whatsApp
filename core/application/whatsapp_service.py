@@ -203,3 +203,6 @@ class WhatsAppSessionService:
             session.connected_at = timezone.now()
             session.qr_code = ''
         session.save()
+        if snapshot.state == SessionState.CONNECTED:
+            from core.services.ai.activation import auto_enable_company_ai
+            auto_enable_company_ai(session.empresa_id)

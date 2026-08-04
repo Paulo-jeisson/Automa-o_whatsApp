@@ -188,18 +188,13 @@ class InboxAndHandoffTests(TestCase):
         self.assertNotContains(response, 'Cliente B')
         self.assertContains(response, 'Cliente solicitou pessoa.')
 
-    def test_assume_return_to_ai_and_finish_record_operator_and_audit(self):
+    def test_assume_and_finish_record_operator_and_audit(self):
         response = self.client.post(reverse('assumir_atendimento', args=[self.attendance.pk]))
         self.assertRedirects(response, reverse('atendimento_detalhe', args=[self.attendance.pk]))
         self.attendance.refresh_from_db()
         self.assertEqual(self.attendance.current_step, Atendimento.Step.HUMAN)
         self.assertEqual(self.attendance.assigned_to, self.user)
         self.assertIsNotNone(self.attendance.assigned_at)
-
-        self.client.post(reverse('devolver_atendimento_ia', args=[self.attendance.pk]))
-        self.attendance.refresh_from_db()
-        self.assertTrue(self.attendance.automation_enabled)
-        self.assertIsNone(self.attendance.assigned_to)
 
         self.client.post(reverse('finalizar_atendimento', args=[self.attendance.pk]))
         self.attendance.refresh_from_db()
@@ -208,9 +203,6 @@ class InboxAndHandoffTests(TestCase):
         self.assertIsNotNone(self.attendance.closed_at)
         self.assertTrue(AuditEvent.objects.filter(
             empresa=self.company, action='attendance.assigned_to_human',
-        ).exists())
-        self.assertTrue(AuditEvent.objects.filter(
-            empresa=self.company, action='attendance.returned_to_ai',
         ).exists())
         self.assertTrue(AuditEvent.objects.filter(
             empresa=self.company, action='attendance.finished',

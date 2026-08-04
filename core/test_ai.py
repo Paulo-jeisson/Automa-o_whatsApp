@@ -5,7 +5,13 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .models import AIConfiguration, AuditEvent, EmpresaCliente
+from .models import (
+    AIConfiguration,
+    AIPromptProfile,
+    AIPromptVersion,
+    AuditEvent,
+    EmpresaCliente,
+)
 from .services.ai import AIAgent, AIConfigurationError, AIProviderError
 from .services.ai.client import OpenAIClient
 
@@ -89,15 +95,51 @@ class AIAgentTests(TestCase):
         self.assertIn('Lia', call['instructions'])
         self.assertEqual(call['user_input'], 'Quero informações')
 
-    def test_company_kill_switch_prevents_provider_call(self):
+    def test_legacy_company_flag_does_not_disable_provider(self):
         self.configuration.enabled = False
         provider = Mock()
-        with self.assertRaises(AIConfigurationError):
+        provider.generate.return_value = SimpleNamespace(
+            text='Resposta automática', response_id='resp_legacy',
+            input_tokens=1, output_tokens=1, tool_calls=0,
+        )
+        reply = AIAgent(client=provider).respond(
+            configuration=self.configuration, user_input='Olá',
+        )
+        self.assertEqual(reply.text, 'Resposta automática')
+        provider.generate.assert_called_once()
+
+
+    def test_agent_loads_generated_prompt_and_logs_its_provenance(self):
+        profile = AIPromptProfile.objects.create(
+            empresa=self.empresa,
+            generated_prompt='PROMPT COMPILADO ATUAL',
+            draft_prompt='RASCUNHO VISIVEL DIFERENTE',
+        )
+        AIPromptVersion.objects.create(
+            profile=profile,
+            version=3,
+            content='PROMPT COMPILADO ATUAL',
+            is_active=True,
+        )
+        provider = Mock()
+        provider.generate.return_value = SimpleNamespace(
+            text='Resposta controlada', response_id='resp_prompt',
+        )
+
+        with self.assertLogs('whatsapp.ai.prompt', level='INFO') as captured:
             AIAgent(client=provider).respond(
                 configuration=self.configuration,
-                user_input='Olá',
+                user_input='Mensagem real',
             )
-        provider.generate.assert_not_called()
+
+        instructions = provider.generate.call_args.kwargs['instructions']
+        self.assertIn('PROMPT COMPILADO ATUAL', instructions)
+        self.assertNotIn('RASCUNHO VISIVEL DIFERENTE', instructions)
+        log = '\n'.join(captured.output)
+        self.assertIn(f'company_id={self.empresa.pk}', log)
+        self.assertIn(f'prompt_id={profile.pk}', log)
+        self.assertIn('prompt_version=3', log)
+        self.assertIn('configured_matches_visible=False', log)
 
 
 class AIConfigurationViewTests(TestCase):

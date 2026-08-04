@@ -125,8 +125,11 @@ class PlansAndOnboardingTests(TestCase):
             empresa=self.company, dia_semana=0,
             hora_inicio=dt_time(8), hora_fim=dt_time(9),
         )
-        from core.models import AIConfiguration
+        from core.models import AIConfiguration, AIPromptProfile
         AIConfiguration.objects.create(empresa=self.company, enabled=True)
+        AIPromptProfile.objects.create(
+            empresa=self.company, generated_prompt='# Prompt de onboarding',
+        )
         WhatsAppIntegration.objects.create(
             company=self.company, phone_number_id='123456',
             whatsapp_business_account_id='654321',

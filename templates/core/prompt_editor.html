@@ -10,11 +10,17 @@
           <h2><span aria-hidden="true">▤</span> PROMPT DO SISTEMA</h2>
           <span id="autosave-state" class="status-pill">{% if profile.autosaved_at %}SALVO{% else %}PRONTO{% endif %}</span>
         </div>
+        <div class="prompt-active-state">
+          <strong>PROMPT ATIVO{% if active_version %} · VERSÃO {{ active_version.version }}{% endif %}</strong>
+          {% if active_version %}<small>Publicado em {{ active_version.published_at|date:"d/m/Y H:i" }} · SHA256 {{ active_version.content_hash }}</small>{% endif %}
+          {% if has_unpublished_changes %}<div class="alert alert-warning">Existem alterações não publicadas.</div>{% else %}<span class="status-pill">SINCRONIZADO</span>{% endif %}
+          <details><summary>VER PROMPT ATIVO</summary><pre class="reference-prompt-preview">{{ prompt }}</pre></details>
+        </div>
         <form method="post" class="reference-form">
           {% csrf_token %}
           <div class="reference-form-group">
-            <label for="prompt-editor">PROMPT DO SISTEMA (PERSONALIDADE DO BOT)</label>
-            <textarea id="prompt-editor" class="reference-prompt-editor" name="prompt_content">{{ prompt }}</textarea>
+            <label for="prompt-editor">RASCUNHO EDITÁVEL</label>
+            <textarea id="prompt-editor" class="reference-prompt-editor" name="prompt_content">{{ draft_prompt }}</textarea>
           </div>
           <div class="reference-form-group response-delay-group">
             <label for="response-delay">◷ TEMPO DE RESPOSTA (SEGUNDOS)</label>
@@ -22,7 +28,8 @@
             <small>⏱ Simula o tempo de digitação humana. A IA aguardará este tempo antes de enviar a resposta.<br><strong>Recomendado:</strong> 2–5 segundos para parecer mais natural</small>
           </div>
           <div class="reference-actions">
-            <button class="btn btn-primary" type="submit">▣ SALVAR PROMPT E TEMPO DE RESPOSTA</button>
+            <button class="btn btn-outline" type="submit" name="action" value="draft">SALVAR RASCUNHO</button>
+            <button class="btn btn-primary" type="submit" name="action" value="publish">PUBLICAR PROMPT</button>
           </div>
         </form>
         <div class="audio-transcription-state">
@@ -33,7 +40,7 @@
       <details class="reference-card prompt-version-details" id="versions">
         <summary>VERSÕES DO PROMPT</summary>
         {% if versions|length > 1 %}<form class="diff-form" method="get" action="{% url 'prompt_diff' %}"><select name="left">{% for v in versions %}<option value="{{ v.id }}">VERSÃO {{ v.version }}</option>{% endfor %}</select><select name="right">{% for v in versions reversed %}<option value="{{ v.id }}">VERSÃO {{ v.version }}</option>{% endfor %}</select><button class="btn btn-outline">COMPARAR</button></form>{% endif %}
-        <div class="version-list">{% for version in versions %}<article><div><strong>VERSÃO {{ version.version }}</strong><small>{{ version.created_at|date:"d/m/Y H:i" }}</small></div><div class="inline-actions"><form method="post" action="{% url 'prompt_restore' version.id %}">{% csrf_token %}<button class="btn btn-outline">RESTAURAR</button></form><form method="post" action="{% url 'prompt_duplicate' version.id %}">{% csrf_token %}<button class="btn btn-outline">DUPLICAR</button></form></div></article>{% endfor %}</div>
+        <div class="version-list">{% for version in versions %}<article><div><strong>VERSÃO {{ version.version }}{% if version.is_active %} · ATIVA{% endif %}</strong><small>{{ version.created_at|date:"d/m/Y H:i" }}</small></div><div class="inline-actions"><form method="post" action="{% url 'prompt_restore' version.id %}">{% csrf_token %}<button class="btn btn-outline">RESTAURAR</button></form><form method="post" action="{% url 'prompt_duplicate' version.id %}">{% csrf_token %}<button class="btn btn-outline">DUPLICAR</button></form></div></article>{% endfor %}</div>
       </details>
     </section>
   </div>

@@ -25,7 +25,6 @@ urlpatterns = [
     path('atendimentos/<int:atendimento_id>/', views.atendimento_detalhe, name='atendimento_detalhe'),
     path('atendimentos/<int:atendimento_id>/assumir/', views.assumir_atendimento, name='assumir_atendimento'),
     path('atendimentos/<int:atendimento_id>/mensagens/enviar/', views.enviar_mensagem_atendimento, name='enviar_mensagem_atendimento'),
-    path('atendimentos/<int:atendimento_id>/devolver-ia/', views.devolver_atendimento_ia, name='devolver_atendimento_ia'),
     path('atendimentos/<int:atendimento_id>/finalizar/', views.finalizar_atendimento, name='finalizar_atendimento'),
     path('atendimentos/<int:atendimento_id>/eventos/', views.atendimento_eventos, name='atendimento_eventos'),
     path('atendimentos/eventos/', views.inbox_eventos, name='inbox_eventos'),

@@ -16,10 +16,10 @@
       <h2>Resumo</h2>
       <dl class="attendance-details">
         <div><dt>Contato</dt><dd>{{ atendimento.contato }}</dd></div><div><dt>Status</dt><dd>{{ atendimento.get_status_display }}</dd></div>
-        <div><dt>Responsável</dt><dd id="live-assignee">{{ atendimento.assigned_to|default:"Não atribuído" }}</dd></div><div><dt>Automação</dt><dd id="live-automation">{% if atendimento.automation_enabled %}Ativa{% else %}Inativa{% endif %}</dd></div>
+        <div><dt>Responsável</dt><dd id="live-assignee">{{ atendimento.assigned_to|default:"Não atribuído" }}</dd></div>
         {% if atendimento.handoff_reason %}<div class="full"><dt>Motivo da transferência</dt><dd>{{ atendimento.handoff_reason }}</dd></div>{% endif %}
       </dl>
-      <div class="attendance-actions">{% if atendimento.current_step == "WAITING_HUMAN" or atendimento.current_step == "HUMAN" %}<form method="post" action="{% url 'devolver_atendimento_ia' atendimento.id %}">{% csrf_token %}<button class="btn btn-outline">Retomar IA</button></form>{% endif %}{% if atendimento.current_step != "FINISHED" %}<form method="post" action="{% url 'finalizar_atendimento' atendimento.id %}">{% csrf_token %}<button class="btn btn-outline">Finalizar</button></form>{% endif %}</div>
+      <div class="attendance-actions">{% if atendimento.current_step != "FINISHED" %}<form method="post" action="{% url 'finalizar_atendimento' atendimento.id %}">{% csrf_token %}<button class="btn btn-outline">Finalizar</button></form>{% endif %}</div>
     </section>
     <section class="panel">
       <h2>Conversa</h2>
@@ -48,7 +48,6 @@
       const data = await response.json();
       document.getElementById("live-state").textContent = labels[data.attendance.step] || data.attendance.step;
       document.getElementById("live-assignee").textContent = data.attendance.assigned_to || "Não atribuído";
-      document.getElementById("live-automation").textContent = data.attendance.automation_enabled ? "Ativa" : "Inativa";
       for (const item of data.messages) {
         if (document.querySelector(`[data-message-id="${item.id}"]`)) continue;
         document.getElementById("empty-messages")?.remove();

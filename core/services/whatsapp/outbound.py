@@ -1,16 +1,18 @@
 import logging
 import time
-import re
+from datetime import timedelta
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from core.domain.exceptions import ProviderUnavailable
 from core.infrastructure.evolution import EvolutionProvider
 from core.models import (
     AIConfiguration, AIPromptProfile, AsyncJob, FluxoAtendimento, Mensagem,
-    WhatsAppSession, IgnoredPhoneNumber,
+    WhatsAppSession,
 )
 from core.services.ai.conversation import AIConversationService
+from core.services.pass_numbers import is_pass_number
 
 from .exceptions import WhatsAppAPIError, WhatsAppProviderError
 from .flow_engine import FlowEngine
@@ -82,18 +84,17 @@ def automatic_reply_ineligibility(inbound_message):
         return 'company_mismatch'
     if not empresa.ativa:
         return 'company_inactive'
+    sender = atendimento.contato.whatsapp_id if atendimento.contato else ''
+    if is_pass_number(inbound_message.empresa_id, sender):
+        return 'pass_number'
+    if automatic_reply_loop_reached(atendimento):
+        return 'loop_protection'
     if atendimento.status == atendimento.STATUS_FINALIZADO or atendimento.current_step == atendimento.Step.FINISHED:
         return 'attendance_closed'
     if atendimento.current_step in {atendimento.Step.WAITING_HUMAN, atendimento.Step.HUMAN} or atendimento.assigned_to_id:
         return 'human_mode'
     if not atendimento.automation_enabled:
         return 'automation_disabled'
-
-    sender = re.sub(r'\D', '', atendimento.contato.whatsapp_id if atendimento.contato else '')
-    if sender and IgnoredPhoneNumber.objects.filter(
-        empresa_id=inbound_message.empresa_id, phone_number=sender,
-    ).exists():
-        return 'blocked_number'
 
     if AsyncJob.objects.filter(
         idempotency_key=f'automatic-reply:{inbound_message.external_message_id}',
@@ -108,18 +109,56 @@ def automatic_reply_ineligibility(inbound_message):
     try:
         profile = AIPromptProfile.objects.get(empresa_id=inbound_message.empresa_id)
     except AIPromptProfile.DoesNotExist:
-        return 'no_active_prompt'
+        return 'prompt_missing'
     if not profile.generated_prompt.strip():
-        return 'no_active_prompt'
+        return 'prompt_missing'
     try:
-        configuration = AIConfiguration.objects.get(empresa_id=inbound_message.empresa_id)
+        AIConfiguration.objects.get(empresa_id=inbound_message.empresa_id)
     except AIConfiguration.DoesNotExist:
-        return 'ai_disabled'
-    if not configuration.enabled:
-        return 'ai_disabled'
+        return 'ai_unavailable'
     if AIConversationService.is_enabled(atendimento) is None:
         return 'ai_unavailable'
     return None
+
+
+def automatic_reply_loop_reached(atendimento):
+    since = timezone.now() - timedelta(minutes=2)
+    reached = Mensagem.objects.filter(
+        empresa_id=atendimento.empresa_id,
+        atendimento_id=atendimento.pk,
+        direcao=Mensagem.DIRECAO_SAIDA,
+        sent_by__isnull=True,
+        criado_em__gte=since,
+    ).count() >= 5
+    if reached and atendimento.automation_enabled:
+        type(atendimento).objects.filter(
+            pk=atendimento.pk, empresa_id=atendimento.empresa_id,
+        ).update(automation_enabled=False)
+        atendimento.automation_enabled = False
+    return reached
+
+
+def prequeue_auto_reply_reason(*, company_id, phone_number, atendimento):
+    if is_pass_number(company_id, phone_number):
+        return 'pass_number'
+    if automatic_reply_loop_reached(atendimento):
+        return 'loop_protection'
+    return None
+
+
+def log_reply_skip(*, company_id, attendance_id=None, message_id='', reason, stage):
+    logger.info(
+        'whatsapp.reply.skip company_id=%s attendance_id=%s message_id=%s stage=%s',
+        company_id, attendance_id, message_id, stage,
+    )
+    logger.info(
+        'whatsapp.reply.reason company_id=%s attendance_id=%s message_id=%s reason=%s stage=%s',
+        company_id, attendance_id, message_id, reason, stage,
+    )
+    logger.info(
+        'whatsapp.reply.end company_id=%s attendance_id=%s message_id=%s outcome=skipped reason=%s stage=%s',
+        company_id, attendance_id, message_id, reason, stage,
+    )
 
 
 def send_text_for_attendance(atendimento, text):
@@ -184,6 +223,11 @@ def send_text_for_attendance(atendimento, text):
 
 
 def send_automatic_reply(inbound_message):
+    logger.info(
+        'whatsapp.reply.begin company_id=%s attendance_id=%s message_id=%s type=%s stage=worker',
+        inbound_message.empresa_id, inbound_message.atendimento_id,
+        inbound_message.external_message_id, inbound_message.tipo,
+    )
     atendimento = normalize_legacy_technical_handoff(inbound_message)
     inbound_message.atendimento = atendimento
     reason = automatic_reply_ineligibility(inbound_message)
@@ -195,10 +239,24 @@ def send_automatic_reply(inbound_message):
             inbound_message.external_message_id,
             reason,
         )
+        log_reply_skip(
+            company_id=inbound_message.empresa_id,
+            attendance_id=atendimento.pk,
+            message_id=inbound_message.external_message_id,
+            reason=reason,
+            stage='worker_eligibility',
+        )
         return None
 
     supported_text = inbound_message.tipo == 'text' and bool(inbound_message.texto)
-    response_text = AIConversationService().reply(inbound_message=inbound_message) if supported_text else None
+    try:
+        response_text = AIConversationService().reply(inbound_message=inbound_message) if supported_text else None
+    except Exception:
+        logger.info(
+            'whatsapp.reply.end company_id=%s attendance_id=%s message_id=%s outcome=error stage=ai',
+            inbound_message.empresa_id, atendimento.pk, inbound_message.external_message_id,
+        )
+        raise
     ai_generated = response_text is not None
     if not supported_text:
         response_text = {
@@ -222,9 +280,23 @@ def send_automatic_reply(inbound_message):
                 inbound_message.empresa_id,
                 atendimento.pk,
             )
+            log_reply_skip(
+                company_id=inbound_message.empresa_id,
+                attendance_id=atendimento.pk,
+                message_id=inbound_message.external_message_id,
+                reason='no_flow',
+                stage='worker_fallback',
+            )
             return None
         response_text = FlowEngine.process(atendimento, inbound_message)
     if not response_text:
+        log_reply_skip(
+            company_id=inbound_message.empresa_id,
+            attendance_id=atendimento.pk,
+            message_id=inbound_message.external_message_id,
+            reason='empty_response',
+            stage='worker_response',
+        )
         return None
     if ai_generated:
         profile = getattr(inbound_message.empresa, 'prompt_profile', None)
@@ -241,12 +313,26 @@ def send_automatic_reply(inbound_message):
                     'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s reason=human_mode',
                     inbound_message.empresa_id, atendimento.pk,
                 )
+                log_reply_skip(
+                    company_id=inbound_message.empresa_id,
+                    attendance_id=atendimento.pk,
+                    message_id=inbound_message.external_message_id,
+                    reason='human_mode',
+                    stage='worker_pre_send',
+                )
                 return None
             outbound_message = send_text_for_attendance(locked, response_text)
     except (WhatsAppAPIError, WhatsAppProviderError):
         AIConversationService._handoff(
             atendimento,
             'Falha ao enviar resposta pela Evolution API.',
+        )
+        log_reply_skip(
+            company_id=inbound_message.empresa_id,
+            attendance_id=atendimento.pk,
+            message_id=inbound_message.external_message_id,
+            reason='provider_send_failed',
+            stage='worker_send',
         )
         return None
 
@@ -255,6 +341,10 @@ def send_automatic_reply(inbound_message):
         inbound_message.empresa_id,
         atendimento.pk,
         outbound_message.external_message_id,
+    )
+    logger.info(
+        'whatsapp.reply.reason company_id=%s attendance_id=%s message_id=%s reason=eligible_user_message stage=worker',
+        inbound_message.empresa_id, atendimento.pk, inbound_message.external_message_id,
     )
 
     try:
@@ -269,6 +359,11 @@ def send_automatic_reply(inbound_message):
             inbound_message.empresa_id,
             inbound_message.external_message_id,
         )
+    logger.info(
+        'whatsapp.reply.end company_id=%s attendance_id=%s message_id=%s outcome=sent outbound_message_id=%s stage=worker',
+        inbound_message.empresa_id, atendimento.pk, inbound_message.external_message_id,
+        outbound_message.external_message_id,
+    )
     return outbound_message
 
 

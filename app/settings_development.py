@@ -14,5 +14,6 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': os.environ.get('SQLITE_NAME', BASE_DIR / 'db.sqlite3'),  # noqa: F405
+        'OPTIONS': {'timeout': 20},
     }
 }

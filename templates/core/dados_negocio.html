@@ -12,8 +12,8 @@
 
     <section class="business-data-grid">
       <article class="reference-card data-import-card">
-        <h2><span>01</span> IMPORTAR PLANILHA</h2>
-        <p class="reference-tip">Aceita Excel (.xlsx) ou CSV, com até 10 MB e 10.000 registros. A primeira linha deve conter o nome das colunas.</p>
+        <h2><span>01</span> IMPORTAR ARQUIVO</h2>
+        <p class="reference-tip">Aceita CSV, Excel, PDF e documentos de texto com até 10 MB. Planilhas usam a primeira linha como colunas; arquivos com uma única linha são indexados como texto; PDFs são indexados por página.</p>
         <form method="post" enctype="multipart/form-data" class="reference-form">{% csrf_token %}
           {% for error in form.non_field_errors %}<div class="alert">{{ error }}</div>{% endfor %}
           {% for field in form %}
@@ -30,6 +30,10 @@
       <article class="reference-card data-test-card">
         <h2><span>02</span> TESTAR CONSULTA</h2>
         <p class="reference-tip">Confira o que a IA conseguirá encontrar. Somente as colunas autorizadas são exibidas.</p>
+        <div class="data-available-sources">
+          <strong>ARQUIVOS DISPONÍVEIS PARA A IA</strong>
+          {% for source in sources %}{% if source.is_active %}<small>{{ source.name }} · {{ source.source_filename }} · {{ source.row_count }} registro{{ source.row_count|pluralize }}</small>{% endif %}{% empty %}<small>Nenhum arquivo ativo.</small>{% endfor %}
+        </div>
         <form method="get" class="data-search-form"><input name="q" value="{{ query }}" placeholder="Ex.: preço do tênis azul"><button class="btn btn-outline" type="submit">PESQUISAR</button></form>
         <div class="data-results">
           {% for record in results %}<article><header><strong>{{ record.source.name }}</strong><small>LINHA {{ record.row_number }}</small></header><dl>{% for key,value in record.visible_data.items %}<div><dt>{{ key }}</dt><dd>{{ value|default:"—" }}</dd></div>{% endfor %}</dl></article>
@@ -45,7 +49,7 @@
           <div class="data-source-state {% if not source.is_active %}inactive{% endif %}"><i></i><span>{% if source.is_active %}ATIVA PARA A IA{% else %}DESATIVADA{% endif %}</span></div>
           <div><strong>{{ source.name }}</strong><small>{{ source.get_data_type_display }} · {{ source.row_count }} registros · {{ source.updated_at|date:"d/m/Y H:i" }}</small><p>IA pode informar: {{ source.ai_visible_columns|join:", " }}</p></div>
           <div class="data-source-actions"><form method="post" action="{% url 'dados_negocio_status' source.pk %}">{% csrf_token %}<button class="btn btn-outline" type="submit">{% if source.is_active %}DESATIVAR{% else %}ATIVAR{% endif %}</button></form><form method="post" action="{% url 'dados_negocio_excluir' source.pk %}">{% csrf_token %}<button class="btn data-delete" type="submit">EXCLUIR</button></form></div>
-        </article>{% empty %}<div class="data-empty">Nenhuma planilha importada.</div>{% endfor %}
+        </article>{% empty %}<div class="data-empty">Nenhum arquivo importado.</div>{% endfor %}
       </div>
     </section>
   </div>

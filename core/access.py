@@ -76,7 +76,6 @@ class RolePermissionMiddleware:
         'atendimento_detalhe': 'attend',
         'assumir_atendimento': 'attend',
         'enviar_mensagem_atendimento': 'attend',
-        'devolver_atendimento_ia': 'attend',
         'finalizar_atendimento': 'attend',
         'atendimento_eventos': 'attend',
         'inbox_eventos': 'attend',

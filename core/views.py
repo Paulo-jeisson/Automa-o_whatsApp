@@ -70,7 +70,7 @@ from .models import (
     BusinessDataSource,
     BusinessDataRecord,
 )
-from .services.business_data import import_business_data
+from .services.business_data import import_business_data, search_business_data
 from .services.scheduling import SchedulingService, SlotUnavailable
 from .services.whatsapp.embedded_signup import EmbeddedSignupService
 from .services.whatsapp import (
@@ -163,7 +163,8 @@ def onboarding(request):
         ),
         'IA configurada': bool(
             getattr(empresa, 'ai_configuration', None)
-            and empresa.ai_configuration.enabled
+            and getattr(empresa, 'prompt_profile', None)
+            and empresa.prompt_profile.generated_prompt.strip()
         ),
         'Teste realizado': progress.test_completed,
     }
@@ -382,7 +383,9 @@ def configuracao_ia(request):
     if request.method == 'POST':
         form = AIConfigurationForm(request.POST, instance=configuration)
         if form.is_valid():
-            configuration = form.save()
+            configuration = form.save(commit=False)
+            configuration.enabled = True
+            configuration.save()
             record_audit(
                 request,
                 'ai.configuration_updated',
@@ -447,14 +450,7 @@ def dados_negocio(request):
     query = request.GET.get('q', '').strip()
     results = BusinessDataRecord.objects.none()
     if query:
-        terms = [term.casefold() for term in query.split() if len(term) >= 2][:8]
-        filters = Q()
-        for term in terms:
-            filters &= Q(searchable_text__icontains=term)
-        if terms:
-            results = BusinessDataRecord.objects.filter(
-                filters, empresa=empresa, source__is_active=True,
-            ).select_related('source')[:30]
+        results, _ = search_business_data(empresa=empresa, query=query, limit=30)
 
     if request.method == 'POST':
         form = BusinessDataImportForm(request.POST, request.FILES)
@@ -1124,55 +1120,6 @@ def enviar_mensagem_atendimento(request, atendimento_id):
         )
         messages.success(request, 'Mensagem enviada.')
     return redirect('atendimento_detalhe', atendimento_id=atendimento_id)
-
-
-@login_required
-@require_POST
-def devolver_atendimento_ia(request, atendimento_id):
-    empresa = _empresa_do_usuario(request)
-    require_permission(request.user, empresa, 'attend')
-    configuration = AIConfiguration.objects.filter(empresa=empresa, enabled=True).first()
-    if not configuration or not configuration.is_available:
-        messages.error(request, 'A IA desta empresa não está disponível.')
-        return redirect('atendimento_detalhe', atendimento_id=atendimento_id)
-    if not AIPromptProfile.objects.filter(
-        empresa=empresa, generated_prompt__regex=r'\S',
-    ).exists():
-        messages.error(request, 'Ative o Prompt da IA antes de retomar a automação.')
-        return redirect('atendimento_detalhe', atendimento_id=atendimento_id)
-    if not WhatsAppSession.objects.filter(empresa=empresa, state='CONNECTED').exists():
-        messages.error(request, 'Conecte a sessão do WhatsApp antes de retomar a automação.')
-        return redirect('atendimento_detalhe', atendimento_id=atendimento_id)
-    with transaction.atomic():
-        atendimento = get_object_or_404(
-            Atendimento.objects.select_for_update(), pk=atendimento_id, empresa=empresa,
-        )
-        if atendimento.current_step not in {
-            Atendimento.Step.WAITING_HUMAN, Atendimento.Step.HUMAN,
-        }:
-            messages.error(request, 'Somente atendimentos em modo humano podem retomar a IA.')
-            return redirect('atendimento_detalhe', atendimento_id=atendimento.pk)
-        previous_step = atendimento.current_step
-        conversation_state = dict(atendimento.conversation_state or {})
-        conversation_state.pop('handoff_reason', None)
-        conversation_state.pop('handoff_type', None)
-        atendimento.current_step = Atendimento.Step.MENU
-        atendimento.automation_enabled = True
-        atendimento.status = Atendimento.STATUS_EM_ANDAMENTO
-        atendimento.assigned_to = None
-        atendimento.assigned_at = None
-        atendimento.handoff_reason = ''
-        atendimento.conversation_state = conversation_state
-        atendimento.save(update_fields=[
-            'current_step', 'automation_enabled', 'status', 'assigned_to',
-            'assigned_at', 'handoff_reason', 'conversation_state',
-        ])
-    record_audit(
-        request, 'attendance.returned_to_ai', empresa=empresa, target=atendimento,
-        metadata={'previous_step': previous_step, 'new_step': Atendimento.Step.MENU},
-    )
-    messages.success(request, 'IA retomada. Ela responderá somente à próxima mensagem recebida.')
-    return redirect('atendimento_detalhe', atendimento_id=atendimento.pk)
 
 
 @login_required

@@ -6,7 +6,11 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import Agendamento, Atendimento, Servico, KnowledgeBaseArticle, BusinessDataRecord
+from core.models import (
+    Agendamento, Atendimento, Servico, KnowledgeBaseArticle,
+    BusinessDataRecord,
+)
+from core.services.business_data import search_business_data
 from core.services.scheduling import SchedulingService, SlotUnavailable
 
 from .exceptions import AIToolError, AIToolValidationError
@@ -112,7 +116,7 @@ TOOL_DEFINITIONS = [
     },
     {
         'type': 'function', 'name': 'pesquisar_dados_negocio',
-        'description': 'Pesquisa dados estruturados e atualizados importados pela empresa, como produtos, preços, estoque e serviços. Retorna somente colunas autorizadas para a IA.',
+        'description': 'Use sempre para consultar fatos importados pela empresa antes de responder sobre cardápio, produtos, preços, estoque, serviços, clientes, veículos, relatórios ou outros dados do negócio. Retorna somente colunas autorizadas para a IA.',
         'parameters': {
             'type': 'object', 'properties': {'consulta': {'type': 'string'}},
             'required': ['consulta'], 'additionalProperties': False,
@@ -305,20 +309,26 @@ class AIToolExecutor:
         ]}
 
     def pesquisar_dados_negocio(self, *, consulta):
-        from django.db.models import Q
-        terms = [term.casefold() for term in str(consulta).strip().split() if len(term) >= 2][:8]
-        if not terms:
+        if not str(consulta or '').strip():
             raise AIToolValidationError('Informe uma consulta mais específica.')
-        filters = Q()
-        for term in terms:
-            filters &= Q(searchable_text__icontains=term)
-        records = BusinessDataRecord.objects.filter(
-            filters, empresa=self.empresa, source__is_active=True,
-        ).select_related('source')[:10]
+        records, requested_columns = search_business_data(
+            empresa=self.empresa, query=consulta, limit=50,
+        )
         return {'resultados': [
-            {'base': item.source.name, 'tipo': item.source.data_type, 'dados': item.visible_data}
+            {
+                'base': item.source.name,
+                'arquivo': item.source.source_filename,
+                'tipo': item.source.data_type,
+                'dados': (
+                    {column: item.visible_data.get(column, '') for column in requested_columns[item.source_id]}
+                    if item.source_id in requested_columns else item.visible_data
+                ),
+            }
             for item in records
-        ], 'orientacao': 'Responda somente com os dados retornados; se vazio, informe que não encontrou.'}
+        ], 'orientacao': (
+            'Liste ou resuma fielmente os valores retornados. '
+            'Se vazio, informe que não encontrou nos dados ativos desta empresa.'
+        )}
 
     def _customer_appointment(self, appointment_id, *, lock=False):
         if not self.atendimento.contato_id:
