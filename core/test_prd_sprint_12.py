@@ -3,7 +3,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from core.models import Atendimento
@@ -24,6 +24,7 @@ class PRDSprintTwelveTests(TestCase):
         self.assertIn('USER iaatende', dockerfile)
         self.assertIn('HEALTHCHECK', dockerfile)
 
+    @override_settings(DEBUG=False, ALLOWED_HOSTS=[])
     def test_release_check_blocks_insecure_production_environment(self):
         with self.assertRaises(CommandError):
             call_command('release_check')

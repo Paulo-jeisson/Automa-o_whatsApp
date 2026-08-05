@@ -175,6 +175,7 @@ class SubscriptionSecurityTests(TestCase):
         self.assertNotIn('value', kwargs)
         self.assertNotIn('cycle', kwargs)
 
+    @override_settings(ASAAS_API_KEY='test-api-key')
     def test_invalid_plan_is_rejected(self):
         response = self.client.post(reverse('subscription_checkout', args=['enterprise']))
         self.assertEqual(response.status_code, 404)
