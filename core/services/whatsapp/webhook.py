@@ -7,6 +7,7 @@ from django.core.exceptions import PermissionDenied
 
 from core.models import Atendimento, Contato, Mensagem, WhatsAppIntegration
 from core.services.entitlements import EntitlementService
+from core.domain.exceptions import SubscriptionAccessDenied
 
 from .parser import NormalizedWebhookEvent
 
@@ -45,6 +46,11 @@ def process_webhook_event(event: NormalizedWebhookEvent):
         integration.save(update_fields=['last_communication_at', 'updated_at'])
 
     if event.event_type == 'message':
+        try:
+            EntitlementService.require_company_access(integration.company)
+        except SubscriptionAccessDenied:
+            logger.info('whatsapp.message.skipped company_id=%s reason=subscription_blocked', integration.company_id)
+            return integration
         inbound_message, created = _persist_inbound_message(integration, event)
         if created:
             from core.services.whatsapp.outbound import prequeue_auto_reply_reason

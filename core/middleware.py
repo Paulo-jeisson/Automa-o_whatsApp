@@ -3,8 +3,11 @@ import logging
 import threading
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import IntegrityError, OperationalError, transaction
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import redirect
+from django.urls import resolve, reverse, Resolver404
 from django.utils import timezone
 
 from .models import RateLimitBucket
@@ -19,7 +22,8 @@ class RateLimitMiddleware:
     POLICIES = (
         ('login', lambda r: r.path == '/login/' and r.method == 'POST', 10, 300),
         ('api_token', lambda r: r.path.startswith('/api/auth/') and r.method == 'POST', 20, 300),
-        ('webhook', lambda r: r.path in {'/webhooks/whatsapp/', '/webhooks/evolution/'}, 120, 60),
+        ('webhook', lambda r: r.path in {'/webhooks/whatsapp/', '/webhooks/evolution/', '/webhooks/asaas/'}, 120, 60),
+        ('billing_checkout', lambda r: r.path.startswith('/assinatura/checkout/') and r.method == 'POST', 10, 300),
         (
             'public_attendance',
             lambda r: r.path.startswith('/atendimento/') and r.method == 'POST',
@@ -128,3 +132,58 @@ class SecurityHeadersMiddleware:
         user = getattr(request, 'user', None)
         response.setdefault('Cache-Control', 'no-store' if user and user.is_authenticated else response.get('Cache-Control', ''))
         return response
+
+
+class SubscriptionAccessMiddleware:
+    """Barreira global fail-closed para todas as views autenticadas."""
+
+    ALLOWED_NAMES = {
+        'landing_page', 'cadastro', 'login', 'logout',
+        'password_reset', 'password_reset_done', 'password_reset_confirm',
+        'password_reset_complete', 'politica_privacidade', 'termos_servico',
+        'exclusao_dados', 'health', 'health_live', 'health_ready',
+        'asaas_webhook', 'whatsapp_webhook', 'evolution_webhook',
+        'assinatura_bloqueada', 'planos', 'iniciar_checkout',
+        'assinatura_status', 'assinatura_retorno', 'trocar_senha',
+    }
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not getattr(settings, 'SUBSCRIPTION_ENFORCEMENT_ENABLED', True):
+            return self.get_response(request)
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated or user.is_superuser:
+            return self.get_response(request)
+        try:
+            match = resolve(request.path_info)
+        except Resolver404:
+            return self.get_response(request)
+        if match.url_name in self.ALLOWED_NAMES or request.path.startswith(('/static/', '/media/')):
+            return self.get_response(request)
+        from core.access import company_for_user
+        from core.services.entitlements import EntitlementService
+        empresa = company_for_user(user)
+        allowed, subscription, reason = EntitlementService.access_state(empresa) if empresa else (False, None, 'missing_company')
+        request.subscription = subscription
+        if allowed:
+            request.subscription_in_grace = subscription.status == subscription.Status.GRACE
+            return self.get_response(request)
+        logger.warning('subscription.request_blocked user_id=%s company_id=%s path=%s reason=%s', user.pk, getattr(empresa, 'pk', None), request.path, reason)
+        target = reverse('assinatura_bloqueada')
+        if request.headers.get('HX-Request') == 'true':
+            response = HttpResponse(status=403)
+            response['HX-Redirect'] = target
+            return response
+        accepts_json = (
+            request.path.startswith('/api/')
+            or request.headers.get('X-Requested-With') in {'XMLHttpRequest', 'ZapFluxo-Menu'}
+            or 'application/json' in request.headers.get('Accept', '')
+        )
+        if accepts_json:
+            return JsonResponse({
+                'error': 'subscription_required',
+                'message': 'Uma assinatura ativa é necessária.',
+            }, status=403)
+        return redirect(target)

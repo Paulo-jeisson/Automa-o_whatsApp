@@ -19,7 +19,7 @@ from core.models import (
     PaymentEvent, PaymentHistory, Plan, ReminderConfiguration, Servico,
     Subscription, UsageCounter, WhatsAppIntegration, WhatsAppSession,
 )
-from core.services.billing import StripeBillingService
+from core.services.billing import AsaasBillingService, external_reference
 from core.services.entitlements import EntitlementService
 from core.services.reminders import ReminderService
 
@@ -101,7 +101,7 @@ class PlansAndOnboardingTests(TestCase):
         self.subscription.save()
         self.assertEqual(
             EntitlementService.subscription(self.company).status,
-            Subscription.Status.SUSPENDED,
+            Subscription.Status.BLOCKED,
         )
 
     def test_public_registration_creates_company_trial_and_onboarding(self):
@@ -140,67 +140,53 @@ class PlansAndOnboardingTests(TestCase):
         self.assertIsNotNone(self.company.onboarding.activated_at)
 
 
-@override_settings(
-    STRIPE_SECRET_KEY='sk_test_safe',
-    STRIPE_WEBHOOK_SECRET='whsec_safe',
-)
+@override_settings(ASAAS_WEBHOOK_TOKEN='asaas-test-token')
 class BillingTests(TestCase):
     def setUp(self):
         user = get_user_model().objects.create_user('billing14')
         self.company = EmpresaCliente.objects.create(usuario=user, nome='Billing')
-        self.plan = Plan.objects.create(name='Pro', code='pro', stripe_price_id='price_safe')
+        self.plan = Plan.objects.get(code='monthly')
         self.subscription = Subscription.objects.create(
             empresa=self.company, plan=self.plan,
         )
 
-    def _signed(self, event):
-        payload = json.dumps(event, separators=(',', ':')).encode()
-        timestamp = int(time.time())
-        digest = hmac.new(
-            b'whsec_safe', f'{timestamp}.'.encode() + payload, hashlib.sha256,
-        ).hexdigest()
-        return payload, f't={timestamp},v1={digest}'
-
     def test_signed_webhook_activates_subscription_and_is_idempotent(self):
         event = {
-            'id': 'evt_checkout_1', 'type': 'checkout.session.completed',
-            'data': {'object': {
-                'client_reference_id': str(self.company.pk),
-                'customer': 'cus_1', 'subscription': 'sub_1',
-                'metadata': {'empresa_id': str(self.company.pk)},
-            }},
+            'id': 'evt_payment_1', 'event': 'PAYMENT_CONFIRMED',
+            'payment': {'id': 'pay_1', 'customer': 'cus_1', 'subscription': 'sub_1',
+                'externalReference': external_reference(self.subscription, self.plan),
+                'value': 147, 'dueDate': timezone.localdate().isoformat()},
         }
-        payload, signature = self._signed(event)
+        payload = json.dumps(event).encode()
         first = self.client.post(
-            reverse('stripe_webhook'), data=payload,
-            content_type='application/json', HTTP_STRIPE_SIGNATURE=signature,
+            reverse('asaas_webhook'), data=payload,
+            content_type='application/json', HTTP_ASAAS_ACCESS_TOKEN='asaas-test-token',
         )
         second = self.client.post(
-            reverse('stripe_webhook'), data=payload,
-            content_type='application/json', HTTP_STRIPE_SIGNATURE=signature,
+            reverse('asaas_webhook'), data=payload,
+            content_type='application/json', HTTP_ASAAS_ACCESS_TOKEN='asaas-test-token',
         )
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
         self.subscription.refresh_from_db()
         self.assertEqual(self.subscription.status, Subscription.Status.ACTIVE)
-        self.assertEqual(PaymentEvent.objects.filter(external_id='evt_checkout_1').count(), 1)
+        self.assertEqual(PaymentEvent.objects.filter(provider_event_id='evt_payment_1').count(), 1)
 
     def test_paid_invoice_creates_financial_history(self):
-        StripeBillingService.process_event({
-            'id': 'evt_invoice_1', 'type': 'invoice.paid',
-            'data': {'object': {
-                'id': 'in_1', 'amount_paid': 9900, 'currency': 'brl',
-                'metadata': {'empresa_id': str(self.company.pk)},
-            }},
+        AsaasBillingService.process_event({
+            'id': 'evt_payment_2', 'event': 'PAYMENT_RECEIVED',
+            'payment': {'id': 'pay_2', 'customer': 'cus_1', 'subscription': 'sub_1',
+                'externalReference': external_reference(self.subscription, self.plan),
+                'value': 147, 'dueDate': timezone.localdate().isoformat()},
         })
-        history = PaymentHistory.objects.get(external_id='in_1')
-        self.assertEqual(history.amount_cents, 9900)
+        history = PaymentHistory.objects.get(external_id='pay_2')
+        self.assertEqual(history.amount_cents, 14700)
 
     def test_invalid_signature_is_rejected(self):
         response = self.client.post(
-            reverse('stripe_webhook'), data=b'{}',
+            reverse('asaas_webhook'), data=b'{}',
             content_type='application/json',
-            HTTP_STRIPE_SIGNATURE='t=1,v1=invalid',
+            HTTP_ASAAS_ACCESS_TOKEN='invalid',
         )
         self.assertEqual(response.status_code, 400)
 

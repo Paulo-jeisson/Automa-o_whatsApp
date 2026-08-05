@@ -124,7 +124,7 @@
             <span class="plan-period">Mensal</span>
             <div class="price compact-price"><strong><small>R$</small>147</strong></div>
             <p class="plan-caption">por mês · renovação<br>automática</p>
-            <button class="btn btn-outline btn-block" type="button">Começar teste</button>
+            <a class="btn btn-outline btn-block" href="{% if request.user.is_authenticated %}{% url 'planos' %}{% else %}{% url 'login' %}?next={% url 'planos' %}{% endif %}">Assinar</a>
           </article>
           <article class="landing-card pricing-card pricing-card-compact annual-plan featured">
             <span class="popular-badge">Popular</span>
@@ -132,7 +132,7 @@
             <div class="price compact-price"><strong><small>R$</small>997</strong></div>
             <p class="installment">12x de R$83,08</p>
             <p class="plan-saving">Economize R$767 vs mensal</p>
-            <button class="btn btn-success btn-block" type="button">Começar teste</button>
+            <a class="btn btn-success btn-block" href="{% if request.user.is_authenticated %}{% url 'planos' %}{% else %}{% url 'login' %}?next={% url 'planos' %}{% endif %}">Assinar</a>
           </article>
         </div>
         <p class="pricing-guarantee">Garantia de 7 dias · Sem fidelidade · Cancele quando quiser</p>

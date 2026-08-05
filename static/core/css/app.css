@@ -2470,6 +2470,24 @@ html, body { background: var(--void) !important; }
 /* Pricing — compact monthly/annual composition from reference. */
 #planos { padding-block: 86px 92px; }
 #planos .landing-container { max-width: 760px; }
+
+.billing-plans { max-width: 760px; margin: 48px auto 18px; }
+.subscription-gate { min-height: 100vh; display: grid; place-items: center; padding: 32px 18px; background-color: #080a1c; background-image: linear-gradient(rgba(76,86,155,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(76,86,155,.08) 1px,transparent 1px); background-size: 70px 70px; }
+.subscription-gate-card { position: relative; width: min(100%, 526px); padding: 58px 50px 48px; text-align: center; border: 1px solid #353762; border-radius: 4px; background: #15162f; box-shadow: 0 24px 70px rgba(0,0,0,.28); }
+.subscription-gate-card::before,.subscription-gate-card::after { content:""; position:absolute; width:25px; height:25px; border-color:#12d7ef; }
+.subscription-gate-card::before { left:-2px; top:-2px; border-left:1px solid; border-top:1px solid; }
+.subscription-gate-card::after { right:-2px; bottom:-2px; border-right:1px solid; border-bottom:1px solid; }
+.subscription-gate-badge { display:inline-block; margin-bottom:24px; padding:8px 18px; border:1px solid #00b982; color:#19e3a4; font-family:'Syne Mono',monospace; font-size:.67rem; letter-spacing:.18em; }
+.subscription-gate-card h2 { margin: 18px 0 12px; color: #f5f6ff; }
+.subscription-gate-card > p { margin: 0 auto 28px; color: #a5a8ca; line-height: 1.7; }
+.subscription-gate-card .btn { margin-top: 12px; }
+.subscription-logout { margin-top:24px; border:0; background:transparent; color:#7f83aa; cursor:pointer; font:600 .72rem 'Space Grotesk',sans-serif; letter-spacing:.1em; }
+.subscription-logout:focus-visible,.subscription-gate-card .btn:focus-visible { outline:2px solid #12d7ef; outline-offset:3px; }
+@media (max-width:600px){.subscription-gate-card{padding:42px 24px 34px}}
+.subscription-warning { padding:10px 18px; text-align:center; background:#51370b; color:#ffe7a3; font-size:.86rem; }
+.subscription-warning a { color:#fff; font-weight:700; margin-left:8px; }
+.billing-method { width:100%; margin:12px 0 2px; padding:10px 12px; border:1px solid var(--border-hi); border-radius:3px; background:#15162f; color:var(--text); }
+.billing-tax-id { display:block; margin-top:10px; color:var(--text-mid); font-size:.75rem; text-align:left; }.billing-tax-id[hidden]{display:none}.billing-tax-id input{width:100%;margin-top:5px;padding:10px;border:1px solid var(--border-hi);background:#15162f;color:var(--text)}
 .pricing-heading { margin-bottom: 40px; text-align: center; }
 .pricing-heading .landing-kicker { color: var(--text-lo); font-size: .6rem; letter-spacing: .28em; }
 .pricing-heading p { font-family: "Syne Mono",monospace; font-size: .72rem; letter-spacing: .16em; margin: 14px auto 0; max-width: none; }

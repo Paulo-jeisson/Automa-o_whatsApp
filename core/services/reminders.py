@@ -8,6 +8,8 @@ from core.models import (
     WhatsAppSession,
 )
 from core.infrastructure.evolution import EvolutionProvider
+from core.domain.exceptions import SubscriptionAccessDenied
+from core.services.entitlements import EntitlementService
 
 
 class ReminderService:
@@ -62,6 +64,13 @@ class ReminderService:
             if locked.status != AppointmentReminder.Status.PENDING:
                 return False
             appointment = locked.appointment
+            try:
+                EntitlementService.require_company_access(appointment.empresa)
+            except SubscriptionAccessDenied:
+                locked.status = AppointmentReminder.Status.FAILED
+                locked.error_code = 'SUBSCRIPTION_BLOCKED'
+                locked.save(update_fields=['status', 'error_code'])
+                return False
             config = appointment.empresa.reminder_configuration
             session = WhatsAppSession.objects.filter(
                 empresa=appointment.empresa, state='CONNECTED',

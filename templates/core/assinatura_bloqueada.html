@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Assinatura necessária | IAATENDE 2.0{% endblock %}
+{% block system_navigation %}{% endblock %}
+{% block body %}<main class="subscription-gate"><section class="subscription-gate-card" aria-labelledby="gate-title">
+<span class="subscription-gate-badge">● &nbsp; ASSINATURA NECESSÁRIA</span>
+<div class="login-heading login-heading-reference"><h1><span>IA</span>ATENDE <small>2.0</small></h1></div>
+<h2 id="gate-title">Seu teste de 3 dias acabou</h2>
+<p>Volte ao site e complete sua assinatura para continuar usando o IAATENDE 2.0. Após a confirmação do pagamento, seu acesso será liberado automaticamente.</p>
+<a class="btn btn-primary btn-block" href="{% url 'planos' %}">ASSINAR AGORA</a>
+<a class="btn btn-outline btn-block" href="{% url 'landing_page' %}">VOLTAR AO SITE</a>
+<form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="subscription-logout" type="submit">SAIR DA CONTA</button></form>
+</section></main>{% endblock %}

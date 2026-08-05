@@ -29,6 +29,11 @@ class AIConversationService:
 
     @staticmethod
     def is_enabled(atendimento):
+        from core.domain.exceptions import SubscriptionAccessDenied
+        try:
+            subscription = EntitlementService.require_company_access(atendimento.empresa)
+        except SubscriptionAccessDenied:
+            return None
         try:
             configuration = AIConfiguration.objects.get(
                 empresa_id=atendimento.empresa_id,
@@ -37,8 +42,7 @@ class AIConversationService:
             return None
         if not configuration.is_available:
             return None
-        subscription = EntitlementService.subscription(atendimento.empresa)
-        if subscription and (not subscription.has_access or not subscription.plan.ai_enabled):
+        if subscription and not subscription.plan.ai_enabled:
             return None
         return configuration
 

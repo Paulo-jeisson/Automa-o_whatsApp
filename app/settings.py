@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -85,6 +86,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'core.middleware.RateLimitMiddleware',
+    'core.middleware.SubscriptionAccessMiddleware',
     'core.access.RolePermissionMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -197,10 +199,17 @@ AI_CONTEXT_SUMMARY_MAX_CHARS = int(os.environ.get('AI_CONTEXT_SUMMARY_MAX_CHARS'
 AI_INPUT_COST_PER_MILLION = Decimal(os.environ.get('AI_INPUT_COST_PER_MILLION', '0'))
 AI_OUTPUT_COST_PER_MILLION = Decimal(os.environ.get('AI_OUTPUT_COST_PER_MILLION', '0'))
 
-STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
-STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
-STRIPE_API_VERSION = os.environ.get('STRIPE_API_VERSION', '2025-06-30.basil')
-TRIAL_DAYS = int(os.environ.get('TRIAL_DAYS', '14'))
+ASAAS_ENVIRONMENT = os.environ.get('ASAAS_ENVIRONMENT', 'sandbox').strip().lower()
+ASAAS_API_URL = os.environ.get('ASAAS_API_URL', 'https://api-sandbox.asaas.com/v3').rstrip('/')
+ASAAS_API_KEY = os.environ.get('ASAAS_API_KEY', '').strip()
+ASAAS_WEBHOOK_TOKEN = os.environ.get('ASAAS_WEBHOOK_TOKEN', '').strip()
+ASAAS_CHECKOUT_SUCCESS_URL = os.environ.get('ASAAS_CHECKOUT_SUCCESS_URL', '').strip()
+ASAAS_CHECKOUT_CANCEL_URL = os.environ.get('ASAAS_CHECKOUT_CANCEL_URL', '').strip()
+ASAAS_CHECKOUT_EXPIRES_IN = int(os.environ.get('ASAAS_CHECKOUT_EXPIRES_IN', '60'))
+TRIAL_DAYS = 3
+SUBSCRIPTION_ENFORCEMENT_ENABLED = os.environ.get(
+    'SUBSCRIPTION_ENFORCEMENT_ENABLED', 'false' if 'test' in sys.argv else 'true',
+).lower() in {'1', 'true', 'yes', 'on'}
 TASK_QUEUE_BACKOFF = int(os.environ.get('TASK_QUEUE_BACKOFF', '30'))
 TASK_QUEUE_MAX_BACKOFF = int(os.environ.get('TASK_QUEUE_MAX_BACKOFF', '3600'))
 OPERATIONAL_ALERT_WEBHOOK = os.environ.get('OPERATIONAL_ALERT_WEBHOOK', '')

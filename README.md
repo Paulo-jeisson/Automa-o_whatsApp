@@ -63,10 +63,14 @@ O projeto carrega o arquivo `.env` local sem substituir variáveis já definidas
 | `AI_CONTEXT_MESSAGE_LIMIT` | Quantidade máxima de mensagens recentes no contexto |
 | `AI_CONTEXT_SUMMARY_TRIGGER` | Total de mensagens que dispara a compactação |
 | `AI_CONTEXT_SUMMARY_MAX_CHARS` | Tamanho máximo do resumo persistido |
-| `STRIPE_SECRET_KEY` | Chave secreta do backend Stripe |
-| `STRIPE_WEBHOOK_SECRET` | Segredo de assinatura do webhook Stripe |
-| `STRIPE_API_VERSION` | Versão fixada da API Stripe |
-| `TRIAL_DAYS` | Duração do período de teste |
+| `ASAAS_ENVIRONMENT` | `sandbox` durante homologação; `production` somente após aprovação |
+| `ASAAS_API_URL` | URL `/v3` correspondente ao ambiente Asaas |
+| `ASAAS_API_KEY` | Chave Asaas exclusiva do backend |
+| `ASAAS_WEBHOOK_TOKEN` | Token forte e exclusivo do webhook IAATENDE |
+| `ASAAS_CHECKOUT_SUCCESS_URL` | Retorno HTTPS após o checkout; não confirma pagamento |
+| `ASAAS_CHECKOUT_CANCEL_URL` | Retorno HTTPS de cancelamento |
+| `ASAAS_CHECKOUT_EXPIRES_IN` | Validade do checkout em minutos (10–1440) |
+| `SUBSCRIPTION_ENFORCEMENT_ENABLED` | Barreira global de assinatura; obrigatório `true` em produção |
 
 Os tokens obtidos pelo Embedded Signup são criptografados por empresa e nunca são
 renderizados no navegador ou no admin.

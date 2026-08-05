@@ -1,8 +1,15 @@
-from django.core.exceptions import PermissionDenied
-from django.utils import timezone
-from django.db import transaction
+import logging
 
+from django.conf import settings
+from django.core.exceptions import PermissionDenied
+from django.db import transaction
+from django.utils import timezone
+
+from core.domain.exceptions import SubscriptionAccessDenied
 from core.models import Subscription, UsageCounter
+
+
+logger = logging.getLogger('billing.access')
 
 
 class EntitlementService:
@@ -12,17 +19,48 @@ class EntitlementService:
             subscription = empresa.subscription
         except Subscription.DoesNotExist:
             return None
-        if subscription.status == Subscription.Status.TRIAL and subscription.trial_ends_at and subscription.trial_ends_at < timezone.now():
-            subscription.status = Subscription.Status.SUSPENDED
-            subscription.save(update_fields=['status', 'updated_at'])
+        now = timezone.now()
+        updates = []
+        if subscription.status == Subscription.Status.TRIAL and not subscription.has_access:
+            subscription.status = Subscription.Status.BLOCKED
+            subscription.blocked_at = now
+            updates = ['status', 'blocked_at', 'updated_at']
+        elif subscription.status == Subscription.Status.GRACE and not subscription.has_access:
+            subscription.status = Subscription.Status.BLOCKED
+            subscription.blocked_at = now
+            updates = ['status', 'blocked_at', 'updated_at']
+        elif subscription.status == Subscription.Status.CANCELED and not subscription.has_access and not subscription.blocked_at:
+            subscription.blocked_at = now
+            updates = ['blocked_at', 'updated_at']
+        if updates:
+            subscription.save(update_fields=updates)
+        return subscription
+
+    @classmethod
+    def access_state(cls, empresa):
+        subscription = cls.subscription(empresa)
+        if subscription is None:
+            return False, None, 'missing_subscription'
+        if not subscription.has_access:
+            return False, subscription, 'invalid_or_expired_subscription'
+        return True, subscription, 'grace' if subscription.status == Subscription.Status.GRACE else 'allowed'
+
+    @classmethod
+    def require_company_access(cls, empresa):
+        if not getattr(settings, 'SUBSCRIPTION_ENFORCEMENT_ENABLED', True):
+            return cls.subscription(empresa)
+        allowed, subscription, reason = cls.access_state(empresa)
+        if not allowed:
+            logger.warning('subscription.access_denied company_id=%s reason=%s', empresa.pk, reason)
+            raise SubscriptionAccessDenied('Uma assinatura ativa é necessária.')
         return subscription
 
     @classmethod
     def require_access(cls, empresa):
-        subscription = cls.subscription(empresa)
-        if subscription and not subscription.has_access:
-            raise PermissionDenied('Assinatura sem acesso.')
-        return subscription
+        try:
+            return cls.require_company_access(empresa)
+        except SubscriptionAccessDenied as error:
+            raise PermissionDenied(str(error)) from error
 
     @classmethod
     def require_limit(cls, empresa, resource):
@@ -31,9 +69,7 @@ class EntitlementService:
             return
         plan = subscription.plan
         if resource == 'operators':
-            current = empresa.memberships.filter(
-                is_active=True,
-            ).exclude(user_id=empresa.usuario_id).count() + 1
+            current = empresa.memberships.filter(is_active=True).exclude(user_id=empresa.usuario_id).count() + 1
             limit = plan.operator_limit
         elif resource == 'whatsapps':
             current = int(hasattr(empresa, 'whatsapp_integration'))
@@ -49,7 +85,7 @@ class EntitlementService:
 
     @classmethod
     def consume(cls, empresa, resource):
-        subscription = cls.subscription(empresa)
+        subscription = cls.require_company_access(empresa)
         if not subscription:
             return
         field = resource

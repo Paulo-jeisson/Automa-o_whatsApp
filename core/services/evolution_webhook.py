@@ -12,6 +12,7 @@ from core.infrastructure.evolution import EvolutionProvider
 from core.infrastructure.repositories import WhatsAppSessionRepository
 from core.models import Atendimento, Contato, Mensagem
 from core.services.entitlements import EntitlementService
+from core.domain.exceptions import SubscriptionAccessDenied
 from core.services.observability import record_metric
 from core.services.queue import enqueue
 from core.services.phone_numbers import brazilian_phone_variants, normalize_phone_number
@@ -179,6 +180,11 @@ class EvolutionWebhookService:
         message_id = str(key.get('id') or data.get('id') or '')
         if key.get('fromMe') or data.get('fromMe'):
             self._reply_skip(session, message_id, 'message_from_me', 'messages.upsert')
+            return None
+        try:
+            EntitlementService.require_company_access(session.empresa)
+        except SubscriptionAccessDenied:
+            self._reply_skip(session, message_id, 'subscription_blocked', 'messages.upsert')
             return None
         remote_jid = str(key.get('remoteJid') or data.get('sender') or '')
         if not message_id:

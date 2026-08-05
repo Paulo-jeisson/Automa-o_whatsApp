@@ -12,6 +12,7 @@ from core.models import (
     WhatsAppSession,
 )
 from core.services.ai.conversation import AIConversationService
+from core.services.entitlements import EntitlementService
 from core.services.pass_numbers import is_pass_number
 
 from .exceptions import WhatsAppAPIError, WhatsAppProviderError
@@ -162,6 +163,7 @@ def log_reply_skip(*, company_id, attendance_id=None, message_id='', reason, sta
 
 
 def send_text_for_attendance(atendimento, text):
+    EntitlementService.require_company_access(atendimento.empresa)
     contato = atendimento.contato
     if contato is None or contato.empresa_id != atendimento.empresa_id:
         raise WhatsAppProviderError('O atendimento não possui um contato válido.')
@@ -228,6 +230,17 @@ def send_automatic_reply(inbound_message):
         inbound_message.empresa_id, inbound_message.atendimento_id,
         inbound_message.external_message_id, inbound_message.tipo,
     )
+    from core.domain.exceptions import SubscriptionAccessDenied
+    try:
+        EntitlementService.require_company_access(inbound_message.empresa)
+    except SubscriptionAccessDenied:
+        log_reply_skip(
+            company_id=inbound_message.empresa_id,
+            attendance_id=inbound_message.atendimento_id,
+            message_id=inbound_message.external_message_id,
+            reason='subscription_blocked', stage='worker_eligibility',
+        )
+        return None
     atendimento = normalize_legacy_technical_handoff(inbound_message)
     inbound_message.atendimento = atendimento
     reason = automatic_reply_ineligibility(inbound_message)

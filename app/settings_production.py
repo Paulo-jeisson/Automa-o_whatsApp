@@ -64,6 +64,12 @@ PASSWORD_RESET_USE_REQUEST_DOMAIN = False
 if AI_ENABLED and not OPENAI_API_KEY:  # noqa: F405
     raise ImproperlyConfigured('OPENAI_API_KEY é obrigatória quando AI_ENABLED=True.')
 
+ASAAS_API_KEY = required('ASAAS_API_KEY')
+ASAAS_WEBHOOK_TOKEN = required('ASAAS_WEBHOOK_TOKEN')
+SUBSCRIPTION_ENFORCEMENT_ENABLED = True
+if ASAAS_ENVIRONMENT not in {'sandbox', 'production'}:  # noqa: F405
+    raise ImproperlyConfigured('ASAAS_ENVIRONMENT deve ser sandbox ou production.')
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',

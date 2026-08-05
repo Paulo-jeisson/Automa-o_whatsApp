@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.utils.text import slugify
 from django.utils import timezone
 from django.core.validators import MaxValueValidator, MinValueValidator
+import uuid
 
 
 class EmpresaCliente(models.Model):
@@ -775,10 +776,15 @@ class CompanyInvitation(models.Model):
 
 
 class Plan(models.Model):
+    class Cycle(models.TextChoices):
+        MONTHLY = 'MONTHLY', 'Mensal'
+        YEARLY = 'YEARLY', 'Anual'
+
     name = models.CharField(max_length=80)
     code = models.SlugField(unique=True)
     price_cents = models.PositiveIntegerField(default=0)
-    stripe_price_id = models.CharField(max_length=120, blank=True)
+    billing_cycle = models.CharField(max_length=12, choices=Cycle.choices, default=Cycle.MONTHLY)
+    legacy_stripe_price_id = models.CharField(max_length=120, blank=True, editable=False)
     operator_limit = models.PositiveIntegerField(default=1)
     attendance_limit = models.PositiveIntegerField(default=100)
     message_limit = models.PositiveIntegerField(default=1000)
@@ -792,25 +798,59 @@ class Plan(models.Model):
 
 
 class Subscription(models.Model):
+    class Provider(models.TextChoices):
+        ASAAS = 'ASAAS', 'Asaas'
+        LEGACY_STRIPE = 'LEGACY_STRIPE', 'Stripe (legado)'
+
     class Status(models.TextChoices):
         TRIAL = 'TRIAL', 'Período de teste'
         ACTIVE = 'ACTIVE', 'Ativa'
-        PAST_DUE = 'PAST_DUE', 'Pagamento pendente'
-        SUSPENDED = 'SUSPENDED', 'Suspensa'
+        GRACE = 'GRACE', 'Pagamento em atraso'
+        BLOCKED = 'BLOCKED', 'Bloqueada'
         CANCELED = 'CANCELED', 'Cancelada'
 
     empresa = models.OneToOneField(EmpresaCliente, on_delete=models.CASCADE, related_name='subscription')
     plan = models.ForeignKey(Plan, on_delete=models.PROTECT, related_name='subscriptions')
+    provider = models.CharField(max_length=20, choices=Provider.choices, default=Provider.ASAAS)
+    billing_reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.TRIAL)
+    trial_started_at = models.DateTimeField(null=True, blank=True)
     trial_ends_at = models.DateTimeField(null=True, blank=True)
+    current_period_start = models.DateTimeField(null=True, blank=True)
     current_period_end = models.DateTimeField(null=True, blank=True)
-    stripe_customer_id = models.CharField(max_length=120, blank=True)
-    stripe_subscription_id = models.CharField(max_length=120, blank=True, unique=True, null=True)
+    legacy_stripe_customer_id = models.CharField(max_length=120, blank=True, editable=False)
+    legacy_stripe_subscription_id = models.CharField(max_length=120, blank=True, null=True, editable=False)
+    provider_customer_id = models.CharField(max_length=120, blank=True)
+    provider_subscription_id = models.CharField(max_length=120, blank=True, null=True)
+    provider_checkout_id = models.CharField(max_length=120, blank=True, null=True)
+    checkout_expires_at = models.DateTimeField(null=True, blank=True)
+    last_payment_at = models.DateTimeField(null=True, blank=True)
+    overdue_since = models.DateTimeField(null=True, blank=True)
+    grace_period_ends_at = models.DateTimeField(null=True, blank=True)
+    blocked_at = models.DateTimeField(null=True, blank=True)
+    canceled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=['provider', 'provider_subscription_id'],
+            condition=models.Q(provider_subscription_id__isnull=False),
+            name='unique_provider_subscription',
+        )]
 
     @property
     def has_access(self):
-        return self.status in {self.Status.TRIAL, self.Status.ACTIVE}
+        now = timezone.now()
+        if self.status == self.Status.TRIAL:
+            return bool(self.trial_started_at and self.trial_ends_at and self.trial_started_at <= now < self.trial_ends_at)
+        if self.status == self.Status.ACTIVE:
+            return bool(self.current_period_start and self.current_period_end and self.current_period_start <= now < self.current_period_end)
+        if self.status == self.Status.GRACE:
+            return bool(self.overdue_since and self.grace_period_ends_at and self.overdue_since <= now < self.grace_period_ends_at)
+        if self.status == self.Status.CANCELED:
+            return bool(self.current_period_end and now < self.current_period_end)
+        return False
 
 
 class UsageCounter(models.Model):
@@ -825,14 +865,39 @@ class UsageCounter(models.Model):
 
 
 class PaymentEvent(models.Model):
-    external_id = models.CharField(max_length=120, unique=True)
+    class Status(models.TextChoices):
+        RECEIVED = 'RECEIVED', 'Recebido'
+        PROCESSING = 'PROCESSING', 'Processando'
+        PROCESSED = 'PROCESSED', 'Processado'
+        FAILED = 'FAILED', 'Falhou'
+        IGNORED = 'IGNORED', 'Ignorado'
+
+    provider = models.CharField(max_length=20, default=Subscription.Provider.ASAAS)
+    provider_event_id = models.CharField(max_length=160)
     event_type = models.CharField(max_length=80)
-    processed_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RECEIVED)
+    empresa = models.ForeignKey(EmpresaCliente, null=True, blank=True, on_delete=models.SET_NULL, related_name='payment_events')
+    subscription = models.ForeignKey(Subscription, null=True, blank=True, on_delete=models.SET_NULL, related_name='events')
+    payment_external_id = models.CharField(max_length=120, blank=True)
+    payload = models.JSONField(default=dict)
+    received_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['provider', 'provider_event_id'], name='unique_provider_event')]
 
 
 class PaymentHistory(models.Model):
     empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='payment_history')
     external_id = models.CharField(max_length=120, unique=True)
+    provider = models.CharField(max_length=20, default=Subscription.Provider.ASAAS)
+    subscription = models.ForeignKey(Subscription, null=True, blank=True, on_delete=models.SET_NULL, related_name='payments')
+    plan_code = models.SlugField(blank=True)
+    due_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=30)
     amount_cents = models.PositiveIntegerField(default=0)
     currency = models.CharField(max_length=3, default='brl')

@@ -26,7 +26,7 @@ def ensure_company_for_user(user):
     if empresa is not None:
         return empresa
     display_name = user.get_full_name().strip() or user.email or user.username
-    empresa, _ = EmpresaCliente.objects.get_or_create(
+    empresa, created = EmpresaCliente.objects.get_or_create(
         usuario=user,
         defaults={
             'nome': f'Espaço de {display_name}'[:120],
@@ -35,6 +35,17 @@ def ensure_company_for_user(user):
             'ativa': True,
         },
     )
+    if created:
+        from datetime import timedelta
+        from django.conf import settings
+        from django.utils import timezone
+        from .models import Plan, Subscription
+        now = timezone.now()
+        plan, _ = Plan.objects.get_or_create(code='trial', defaults={'name': 'Trial', 'price_cents': 0})
+        Subscription.objects.create(
+            empresa=empresa, plan=plan, status=Subscription.Status.TRIAL,
+            trial_started_at=now, trial_ends_at=now + timedelta(days=settings.TRIAL_DAYS),
+        )
     return empresa
 
 

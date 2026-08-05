@@ -16,6 +16,7 @@ from django.core.mail import send_mail
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from datetime import timedelta
 import hashlib
+import json
 from django.utils.crypto import constant_time_compare
 import secrets
 
@@ -84,7 +85,11 @@ from .services.whatsapp.tokens import access_token_for
 from .services.whatsapp.outbound import send_text_for_attendance
 from .audit import record_audit
 from .access import company_for_user, require_permission
-from .services.billing import StripeBillingService
+from .services.billing import (
+    AsaasBillingService, BillingValidationError, commercial_plan,
+    verify_webhook_token,
+)
+from .services.billing_providers.asaas import AsaasError
 from .services.entitlements import EntitlementService
 
 
@@ -136,9 +141,11 @@ def cadastro(request):
                 code='trial',
                 defaults={'name': 'Trial', 'price_cents': 0},
             )
+            now = timezone.now()
             Subscription.objects.create(
                 empresa=empresa, plan=plan,
-                trial_ends_at=timezone.now() + timedelta(days=settings.TRIAL_DAYS),
+                trial_started_at=now,
+                trial_ends_at=now + timedelta(days=settings.TRIAL_DAYS),
             )
             CompanyOnboarding.objects.create(empresa=empresa)
         login(request, user)
@@ -249,46 +256,87 @@ def aceitar_convite(request, token):
 def planos(request):
     empresa = _empresa_do_usuario(request)
     subscription = EntitlementService.subscription(empresa)
+    plans = [commercial_plan('monthly'), commercial_plan('annual')]
     return render(request, 'core/planos.html', {
-        'empresa': empresa, 'plans': Plan.objects.filter(is_active=True),
+        'empresa': empresa, 'plans': plans,
         'subscription': subscription,
     })
 
 
 @login_required
 @require_POST
-def iniciar_checkout(request, plan_id):
+def iniciar_checkout(request, plan_code):
     empresa = _empresa_do_usuario(request)
     require_permission(request.user, empresa, 'manage_billing')
-    plan = get_object_or_404(Plan, pk=plan_id, is_active=True)
     try:
-        session = StripeBillingService().create_checkout(
-            empresa=empresa, plan=plan,
-            success_url=request.build_absolute_uri(reverse('planos')) + '?checkout=success',
-            cancel_url=request.build_absolute_uri(reverse('planos')) + '?checkout=cancel',
+        checkout = AsaasBillingService().create_checkout(
+            empresa=empresa, plan_code=plan_code,
+            success_url=settings.ASAAS_CHECKOUT_SUCCESS_URL or request.build_absolute_uri(reverse('assinatura_retorno')),
+            cancel_url=settings.ASAAS_CHECKOUT_CANCEL_URL or request.build_absolute_uri(reverse('assinatura_retorno')) + '?state=cancelled',
+            expired_url=request.build_absolute_uri(reverse('assinatura_retorno')) + '?state=expired',
+            billing_type=request.POST.get('billing_type', 'HOSTED'),
+            tax_id=request.POST.get('tax_id', ''),
         )
-    except (ImproperlyConfigured, RuntimeError):
+    except BillingValidationError as error:
+        if plan_code not in {'monthly', 'annual'} or request.POST.get('billing_type', 'HOSTED') not in {'HOSTED', 'BOLETO'}:
+            record_audit(request, 'billing.plan_tampering', empresa=empresa, metadata={'plan_code': str(plan_code)[:30]})
+            return JsonResponse({'detail': 'Plano ou forma de pagamento inválida.'}, status=404)
+        messages.error(request, str(error))
+        return redirect('planos')
+    except (ImproperlyConfigured, AsaasError):
         messages.error(request, 'Cobrança temporariamente indisponível.')
         return redirect('planos')
-    subscription, _ = Subscription.objects.get_or_create(
-        empresa=empresa, defaults={'plan': plan},
+    record_audit(
+        request, 'billing.checkout_reused' if checkout.get('reused') else 'billing.checkout_requested',
+        empresa=empresa, metadata={'plan_code': plan_code, 'checkout_id': checkout['id']},
     )
-    subscription.plan = plan
-    subscription.save(update_fields=['plan', 'updated_at'])
-    return redirect(session['url'])
+    return redirect(checkout['link'])
 
 
 @csrf_exempt
 @require_POST
-def stripe_webhook(request):
+def asaas_webhook(request):
+    if len(request.body) > 256 * 1024:
+        return JsonResponse({'detail': 'Payload muito grande.'}, status=413)
     try:
-        event = StripeBillingService.verify_event(
-            request.body, request.headers.get('Stripe-Signature', ''),
-        )
-        StripeBillingService.process_event(event)
-    except (ValueError, ImproperlyConfigured):
+        verify_webhook_token(request.headers.get('asaas-access-token', ''))
+        event = json.loads(request.body)
+        if not isinstance(event, dict):
+            raise BillingValidationError('Evento inválido.')
+        AsaasBillingService.process_event(event)
+    except (json.JSONDecodeError, UnicodeDecodeError, BillingValidationError, ImproperlyConfigured):
         return JsonResponse({'detail': 'Evento inválido.'}, status=400)
+    except Exception:
+        return JsonResponse({'detail': 'Falha no processamento.'}, status=500)
     return JsonResponse({'received': True})
+
+
+@login_required
+def assinatura_bloqueada(request):
+    empresa = _empresa_do_usuario(request)
+    subscription = EntitlementService.subscription(empresa)
+    if subscription and subscription.has_access:
+        return redirect('dashboard')
+    return render(request, 'core/assinatura_bloqueada.html', {'subscription': subscription})
+
+
+@login_required
+def assinatura_retorno(request):
+    empresa = _empresa_do_usuario(request)
+    return render(request, 'core/assinatura_retorno.html', {
+        'subscription': EntitlementService.subscription(empresa),
+        'return_state': request.GET.get('state', 'processing'),
+    })
+
+
+@login_required
+def assinatura_status(request):
+    empresa = _empresa_do_usuario(request)
+    subscription = EntitlementService.subscription(empresa)
+    return JsonResponse({
+        'status': subscription.status if subscription else 'BLOCKED',
+        'has_access': bool(subscription and subscription.has_access),
+    })
 
 
 @login_required
