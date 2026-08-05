@@ -1,7 +1,7 @@
-PROMPT ESTRATÉGICO — REESTRUTURAÇÃO DO ZAPFLUXO (QR CODE + IA)
+PROMPT ESTRATÉGICO — REESTRUTURAÇÃO DO IAATENDE 2.0 (QR CODE + IA)
 OBJETIVO
 
-Refatorar o ZapFluxo para torná-lo uma plataforma SaaS profissional de atendimento automatizado via WhatsApp Web utilizando QR Code.
+Refatorar o IAATENDE 2.0 para torná-lo uma plataforma SaaS profissional de atendimento automatizado via WhatsApp Web utilizando QR Code.
 
 Toda implementação deverá seguir arquitetura limpa, princípios SOLID, Clean Code, DRY, KISS, Repository Pattern, Service Layer, testes automatizados e isolamento total por empresa.
 

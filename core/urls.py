@@ -8,6 +8,8 @@ from .presentation import security_views
 
 urlpatterns = [
     path('', views.landing_page, name='landing_page'),
+    path('robots.txt', views.robots_txt, name='robots_txt'),
+    path('sitemap.xml', views.sitemap_xml, name='sitemap_xml'),
     path('cadastro/', views.cadastro, name='cadastro'),
     path('onboarding/', views.onboarding, name='onboarding'),
     path('equipe/', views.equipe, name='equipe'),
@@ -16,9 +18,10 @@ urlpatterns = [
     path('planos/', views.planos, name='planos'),
     path('assinatura/', views.planos, name='assinatura'),
     path('assinatura/bloqueada/', views.assinatura_bloqueada, name='assinatura_bloqueada'),
-    path('assinatura/checkout/<slug:plan_code>/', views.iniciar_checkout, name='iniciar_checkout'),
+    path('assinatura/checkout/<slug:plan_code>/', views.subscription_checkout, name='subscription_checkout'),
     path('assinatura/retorno/', views.assinatura_retorno, name='assinatura_retorno'),
     path('assinatura/status/', views.assinatura_status, name='assinatura_status'),
+    path('assinatura/finalizar/', views.assinatura_finalizar, name='assinatura_finalizar'),
     path('webhooks/asaas/', views.asaas_webhook, name='asaas_webhook'),
     path('agenda/lembretes/', views.lembretes_configuracao, name='lembretes_configuracao'),
     path('politica-de-privacidade/', views.politica_privacidade, name='politica_privacidade'),

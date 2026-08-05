@@ -682,7 +682,7 @@ class AuditEvent(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='zapfluxo_audit_events',
+        related_name='iaatende_audit_events',
     )
     empresa = models.ForeignKey(
         EmpresaCliente,
@@ -888,6 +888,27 @@ class PaymentEvent(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['provider', 'provider_event_id'], name='unique_provider_event')]
+
+
+class BillingCheckoutAttempt(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pendente'
+        PAID = 'PAID', 'Pago'
+        ABANDONED = 'ABANDONED', 'Abandonado'
+
+    empresa = models.ForeignKey(EmpresaCliente, on_delete=models.CASCADE, related_name='billing_checkout_attempts')
+    subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE, related_name='checkout_attempts')
+    provider = models.CharField(max_length=20, default=Subscription.Provider.ASAAS)
+    provider_checkout_id = models.CharField(max_length=120, unique=True)
+    external_reference = models.CharField(max_length=240, unique=True)
+    plan_code = models.SlugField()
+    amount_cents = models.PositiveIntegerField()
+    cycle = models.CharField(max_length=12)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class PaymentHistory(models.Model):

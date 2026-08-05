@@ -11,6 +11,7 @@ from django.urls import resolve, reverse, Resolver404
 from django.utils import timezone
 
 from .models import RateLimitBucket
+from .public_routes import PUBLIC_HTML_URL_NAMES
 from .security import client_ip
 
 logger = logging.getLogger('security.rate_limit')
@@ -137,14 +138,17 @@ class SecurityHeadersMiddleware:
 class SubscriptionAccessMiddleware:
     """Barreira global fail-closed para todas as views autenticadas."""
 
-    ALLOWED_NAMES = {
+    ALLOWED_NAMES = PUBLIC_HTML_URL_NAMES | {
         'landing_page', 'cadastro', 'login', 'logout',
         'password_reset', 'password_reset_done', 'password_reset_confirm',
         'password_reset_complete', 'politica_privacidade', 'termos_servico',
         'exclusao_dados', 'health', 'health_live', 'health_ready',
         'asaas_webhook', 'whatsapp_webhook', 'evolution_webhook',
-        'assinatura_bloqueada', 'planos', 'iniciar_checkout',
+        'assinatura_bloqueada', 'planos', 'subscription_checkout',
         'assinatura_status', 'assinatura_retorno', 'trocar_senha',
+        'assinatura_finalizar',
+        'atendimento_publico',
+        'robots_txt', 'sitemap_xml',
     }
 
     def __init__(self, get_response):
@@ -178,7 +182,7 @@ class SubscriptionAccessMiddleware:
             return response
         accepts_json = (
             request.path.startswith('/api/')
-            or request.headers.get('X-Requested-With') in {'XMLHttpRequest', 'ZapFluxo-Menu'}
+            or request.headers.get('X-Requested-With') in {'XMLHttpRequest', 'IAATENDE-Menu'}
             or 'application/json' in request.headers.get('Accept', '')
         )
         if accepts_json:

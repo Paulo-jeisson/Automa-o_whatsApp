@@ -8,6 +8,7 @@ from .settings import *  # noqa: F403
 
 
 DEBUG = False
+APP_ENV = 'production'
 
 
 def required(name):
@@ -51,12 +52,19 @@ DEFAULT_FROM_EMAIL = required('DEFAULT_FROM_EMAIL')
 EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '20'))
 PASSWORD_RESET_TIMEOUT = int(os.environ.get('PASSWORD_RESET_TIMEOUT', '3600'))
 PUBLIC_BASE_URL = required('PUBLIC_BASE_URL').rstrip('/')
+SITE_URL = required('SITE_URL').rstrip('/')
 if EMAIL_BACKEND != 'django.core.mail.backends.smtp.EmailBackend':
     raise ImproperlyConfigured('EMAIL_BACKEND deve usar smtp.EmailBackend em produção.')
 if EMAIL_USE_TLS and os.environ.get('EMAIL_USE_SSL', 'False').lower() in {'1', 'true', 'yes', 'on'}:
     raise ImproperlyConfigured('EMAIL_USE_TLS e EMAIL_USE_SSL não podem estar ativos ao mesmo tempo.')
 if PUBLIC_BASE_URL.startswith(('http://127.0.0.1', 'https://127.0.0.1', 'http://localhost', 'https://localhost')):
     raise ImproperlyConfigured('PUBLIC_BASE_URL deve usar o domínio público em produção.')
+if PUBLIC_BASE_URL != 'https://iaatende.app' or SITE_URL != 'https://iaatende.app':
+    raise ImproperlyConfigured('PUBLIC_BASE_URL e SITE_URL devem usar https://iaatende.app em produção.')
+if set(ALLOWED_HOSTS) != {'iaatende.app', 'www.iaatende.app'}:
+    raise ImproperlyConfigured('ALLOWED_HOSTS de produção deve conter apenas iaatende.app e www.iaatende.app.')
+if set(CSRF_TRUSTED_ORIGINS) != {'https://iaatende.app', 'https://www.iaatende.app'}:
+    raise ImproperlyConfigured('CSRF_TRUSTED_ORIGINS de produção inválida.')
 
 RATELIMIT_TRUST_PROXY = True
 PASSWORD_RESET_USE_REQUEST_DOMAIN = False
@@ -66,9 +74,24 @@ if AI_ENABLED and not OPENAI_API_KEY:  # noqa: F405
 
 ASAAS_API_KEY = required('ASAAS_API_KEY')
 ASAAS_WEBHOOK_TOKEN = required('ASAAS_WEBHOOK_TOKEN')
+ASAAS_CHECKOUT_SUCCESS_URL = required('ASAAS_CHECKOUT_SUCCESS_URL')
+ASAAS_CHECKOUT_CANCEL_URL = required('ASAAS_CHECKOUT_CANCEL_URL')
+EVOLUTION_WEBHOOK_URL = required('EVOLUTION_WEBHOOK_URL')
 SUBSCRIPTION_ENFORCEMENT_ENABLED = True
 if ASAAS_ENVIRONMENT not in {'sandbox', 'production'}:  # noqa: F405
     raise ImproperlyConfigured('ASAAS_ENVIRONMENT deve ser sandbox ou production.')
+expected_asaas_url = {
+    'sandbox': 'https://api-sandbox.asaas.com/v3',
+    'production': 'https://api.asaas.com/v3',
+}[ASAAS_ENVIRONMENT]
+if ASAAS_API_URL != expected_asaas_url:  # noqa: F405
+    raise ImproperlyConfigured('ASAAS_API_URL não corresponde ao ASAAS_ENVIRONMENT.')
+if ASAAS_CHECKOUT_SUCCESS_URL != 'https://iaatende.app/assinatura/retorno/':
+    raise ImproperlyConfigured('ASAAS_CHECKOUT_SUCCESS_URL de produção inválida.')
+if ASAAS_CHECKOUT_CANCEL_URL != 'https://iaatende.app/planos/':
+    raise ImproperlyConfigured('ASAAS_CHECKOUT_CANCEL_URL de produção inválida.')
+if EVOLUTION_WEBHOOK_URL != 'https://iaatende.app/webhooks/evolution/':
+    raise ImproperlyConfigured('EVOLUTION_WEBHOOK_URL de produção inválida.')
 
 DATABASES = {
     'default': {

@@ -45,7 +45,8 @@ def env_list(name, default=''):
     return [item.strip() for item in os.environ.get(name, default).split(',') if item.strip()]
 
 
-load_local_env(BASE_DIR / '.env')
+if os.environ.get('APP_ENV', 'development').strip().lower() != 'production':
+    load_local_env(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -60,7 +61,9 @@ if not SECRET_KEY:
     else:
         raise ImproperlyConfigured('DJANGO_SECRET_KEY é obrigatória quando DEBUG=False.')
 
-PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', '').rstrip('/')
+APP_ENV = os.environ.get('APP_ENV', 'development').strip().lower()
+PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', 'http://127.0.0.1:8000').rstrip('/')
+SITE_URL = os.environ.get('SITE_URL', PUBLIC_BASE_URL).rstrip('/')
 ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', '127.0.0.1,localhost,testserver')
 CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
 
@@ -170,8 +173,8 @@ LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'prompt_generator'
 LOGOUT_REDIRECT_URL = 'login'
 
-ZAPFLUXO_WHATSAPP = ''.join(
-    character for character in os.environ.get('ZAPFLUXO_WHATSAPP', '')
+IAATENDE_WHATSAPP = ''.join(
+    character for character in os.environ.get('IAATENDE_WHATSAPP', '')
     if character.isdigit()
 )
 
@@ -207,8 +210,8 @@ ASAAS_CHECKOUT_SUCCESS_URL = os.environ.get('ASAAS_CHECKOUT_SUCCESS_URL', '').st
 ASAAS_CHECKOUT_CANCEL_URL = os.environ.get('ASAAS_CHECKOUT_CANCEL_URL', '').strip()
 ASAAS_CHECKOUT_EXPIRES_IN = int(os.environ.get('ASAAS_CHECKOUT_EXPIRES_IN', '60'))
 TRIAL_DAYS = 3
-SUBSCRIPTION_ENFORCEMENT_ENABLED = os.environ.get(
-    'SUBSCRIPTION_ENFORCEMENT_ENABLED', 'false' if 'test' in sys.argv else 'true',
+SUBSCRIPTION_ENFORCEMENT_ENABLED = False if 'test' in sys.argv else os.environ.get(
+    'SUBSCRIPTION_ENFORCEMENT_ENABLED', 'true',
 ).lower() in {'1', 'true', 'yes', 'on'}
 TASK_QUEUE_BACKOFF = int(os.environ.get('TASK_QUEUE_BACKOFF', '30'))
 TASK_QUEUE_MAX_BACKOFF = int(os.environ.get('TASK_QUEUE_MAX_BACKOFF', '3600'))
@@ -247,7 +250,7 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '').strip()
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '').strip()
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in {'1', 'true', 'yes', 'on'}
 EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False').lower() in {'1', 'true', 'yes', 'on'}
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'ZapFluxo <nao-responda@localhost>').strip()
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'IAATENDE 2.0 <nao-responda@localhost>').strip()
 EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '20'))
 PASSWORD_RESET_TIMEOUT = int(os.environ.get('PASSWORD_RESET_TIMEOUT', '3600'))
 EMAIL_BACKEND = resolve_email_backend(os.environ)
@@ -255,7 +258,8 @@ EMAIL_BACKEND = resolve_email_backend(os.environ)
 EVOLUTION_API_URL = os.environ.get('EVOLUTION_API_URL', '')
 EVOLUTION_API_KEY = os.environ.get('EVOLUTION_API_KEY', '')
 EVOLUTION_WEBHOOK_SECRET = os.environ.get('EVOLUTION_WEBHOOK_SECRET', '')
+EVOLUTION_WEBHOOK_URL = os.environ.get('EVOLUTION_WEBHOOK_URL', '').strip()
 JWT_ACCESS_SECONDS = int(os.environ.get('JWT_ACCESS_SECONDS', '900'))
 JWT_REFRESH_SECONDS = int(os.environ.get('JWT_REFRESH_SECONDS', '604800'))
 APP_VERSION = os.environ.get('APP_VERSION', 'development')
-CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zapfluxo-runtime'}}
+CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'iaatende-runtime'}}

@@ -26,7 +26,7 @@ class WhatsAppSessionService:
     def ensure(self, empresa):
         session, _ = WhatsAppSession.objects.get_or_create(
             empresa=empresa,
-            defaults={'instance_name': f'zapfluxo-{empresa.pk}-{uuid4().hex[:8]}'},
+            defaults={'instance_name': f'iaatende-{empresa.pk}-{uuid4().hex[:8]}'},
         )
         return session
 

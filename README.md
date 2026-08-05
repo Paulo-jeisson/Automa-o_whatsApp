@@ -1,4 +1,4 @@
-# ZapFluxo
+# IAATENDE 2.0
 
 Plataforma Django multiempresa para organização e automação de atendimentos pelo WhatsApp. O MVP preserva o simulador público e os avisos por `wa.me`, enquanto o webhook recebe eventos reais da WhatsApp Business Platform oficial.
 
@@ -66,7 +66,7 @@ O projeto carrega o arquivo `.env` local sem substituir variáveis já definidas
 | `ASAAS_ENVIRONMENT` | `sandbox` durante homologação; `production` somente após aprovação |
 | `ASAAS_API_URL` | URL `/v3` correspondente ao ambiente Asaas |
 | `ASAAS_API_KEY` | Chave Asaas exclusiva do backend |
-| `ASAAS_WEBHOOK_TOKEN` | Token forte e exclusivo do webhook IAATENDE |
+| `ASAAS_WEBHOOK_TOKEN` | Token forte e exclusivo do webhook IAATENDE 2.0 |
 | `ASAAS_CHECKOUT_SUCCESS_URL` | Retorno HTTPS após o checkout; não confirma pagamento |
 | `ASAAS_CHECKOUT_CANCEL_URL` | Retorno HTTPS de cancelamento |
 | `ASAAS_CHECKOUT_EXPIRES_IN` | Validade do checkout em minutos (10–1440) |
@@ -79,7 +79,7 @@ renderizados no navegador ou no admin.
 
 No painel da Meta, crie uma configuração do **WhatsApp Embedded Signup** para o
 aplicativo, habilite `whatsapp_business_management` e
-`whatsapp_business_messaging`, e cadastre o domínio HTTPS definitivo do ZapFluxo.
+`whatsapp_business_messaging`, e cadastre o domínio HTTPS definitivo do IAATENDE 2.0.
 Preencha `META_APP_ID`, `META_APP_SECRET` e
 `META_EMBEDDED_SIGNUP_CONFIG_ID` no ambiente do servidor.
 
@@ -226,7 +226,7 @@ python manage.py whatsapp_send_test --atendimento ID_DO_ATENDIMENTO --confirm
 Texto controlado opcional:
 
 ```powershell
-python manage.py whatsapp_send_test --atendimento ID_DO_ATENDIMENTO --mensagem "Teste controlado do ZapFluxo." --confirm
+python manage.py whatsapp_send_test --atendimento ID_DO_ATENDIMENTO --mensagem "Teste controlado do IAATENDE 2.0." --confirm
 ```
 
 O destinatário e o Phone Number ID não podem ser informados pelo terminal: ambos são obtidos das relações multiempresa do atendimento. O comando não mostra o Access Token.

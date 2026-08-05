@@ -49,7 +49,7 @@ class PRDSprintsOneToFiveTests(TestCase):
         response = self.client.post(
             reverse('evolution_webhook'),
             data=json.dumps({'instance': session.instance_name, 'event': 'connection.update', 'data': {'state': 'open'}}),
-            content_type='application/json', HTTP_X_ZAPFLUXO_SECRET='secret',
+            content_type='application/json', HTTP_X_IAATENDE_SECRET='secret',
         )
         self.assertEqual(response.status_code, 202)
         job = AsyncJob.objects.get(task_name='evolution.webhook')

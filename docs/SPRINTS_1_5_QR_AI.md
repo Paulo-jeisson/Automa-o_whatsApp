@@ -6,7 +6,7 @@ Os novos módulos seguem `domain → application → infrastructure → presenta
 
 ## Evolution API
 
-Configure `EVOLUTION_API_URL`, `EVOLUTION_API_KEY` e `EVOLUTION_WEBHOOK_SECRET`. Cadastre o webhook do provider em `/webhooks/evolution/` enviando o segredo no header `X-ZapFluxo-Secret`.
+Configure `EVOLUTION_API_URL`, `EVOLUTION_API_KEY` e `EVOLUTION_WEBHOOK_SECRET`. Cadastre o webhook do provider em `/webhooks/evolution/` enviando o segredo no header `X-IAATENDE-Secret`.
 
 O comando abaixo executa heartbeat e reconexão automática. Em produção, deve ser agendado pelo worker/timer:
 

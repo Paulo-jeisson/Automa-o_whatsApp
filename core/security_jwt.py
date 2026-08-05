@@ -26,7 +26,7 @@ def _decode(value):
 
 
 def _key():
-    return hashlib.sha256(f'{settings.SECRET_KEY}:zapfluxo-jwt-v1'.encode()).digest()
+    return hashlib.sha256(f'{settings.SECRET_KEY}:iaatende-jwt-v1'.encode()).digest()
 
 
 def encode(payload):

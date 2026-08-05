@@ -181,7 +181,7 @@ class EmbeddedSignupService:
         ])
         if remote_error:
             raise WhatsAppProviderError(
-                'O número foi desconectado do ZapFluxo, mas a Meta não confirmou '
+                'O número foi desconectado do IAATENDE 2.0, mas a Meta não confirmou '
                 'a remoção da assinatura.'
             ) from remote_error
         return integration
@@ -190,7 +190,7 @@ class EmbeddedSignupService:
     def _validate_token(cls, response):
         data = response.get('data', {})
         if not data.get('is_valid') or str(data.get('app_id', '')) != settings.META_APP_ID:
-            raise WhatsAppProviderError('A autorização não pertence ao aplicativo ZapFluxo.')
+            raise WhatsAppProviderError('A autorização não pertence ao aplicativo IAATENDE 2.0.')
         scopes = set(data.get('scopes') or [])
         if not cls.REQUIRED_SCOPES.issubset(scopes):
             raise WhatsAppProviderError('A autorização não concedeu todas as permissões necessárias.')

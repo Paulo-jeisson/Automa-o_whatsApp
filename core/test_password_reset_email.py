@@ -29,7 +29,7 @@ class PasswordResetEmailTests(TestCase):
         self.assertRedirects(response, reverse('password_reset_done'))
         self.assertEqual(len(mail.outbox), 1)
         message = mail.outbox[0]
-        self.assertEqual(message.subject, 'Redefinição de senha — IAATENDE')
+        self.assertEqual(message.subject, 'Redefinição de senha — IAATENDE 2.0')
         self.assertEqual(message.to, ['owner@example.com'])
         self.assertIn('http://dev.example.test/senha/redefinir/', message.body)
         self.assertNotIn('localhost', message.body)
@@ -99,7 +99,7 @@ class EmailBackendSelectionTests(TestCase):
         environment = {
             'EMAIL_BACKEND': SMTP_BACKEND, 'EMAIL_HOST': 'smtp.gmail.com',
             'EMAIL_HOST_USER': 'sender@gmail.com', 'EMAIL_HOST_PASSWORD': 'app-password',
-            'DEFAULT_FROM_EMAIL': 'ZapFluxo <sender@gmail.com>',
+            'DEFAULT_FROM_EMAIL': 'IAATENDE 2.0 <sender@gmail.com>',
         }
         self.assertEqual(resolve_email_backend(environment), SMTP_BACKEND)
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=Apply IAATENDE 2.0 data retention daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=iaatende-retention.service
+
+[Install]
+WantedBy=timers.target

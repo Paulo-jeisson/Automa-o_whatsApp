@@ -15,7 +15,7 @@ class Command(BaseCommand):
         parser.add_argument('--atendimento', type=int, required=True)
         parser.add_argument(
             '--mensagem',
-            default='Teste de integração do ZapFluxo.',
+            default='Teste de integração do IAATENDE 2.0.',
             help='Texto controlado, com no máximo 4096 caracteres.',
         )
         parser.add_argument(

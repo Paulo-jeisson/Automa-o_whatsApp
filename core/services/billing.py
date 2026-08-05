@@ -4,21 +4,31 @@ import re
 from calendar import monthrange
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from types import MappingProxyType
+from uuid import uuid4
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import AuditEvent, PaymentEvent, PaymentHistory, Plan, Subscription
+from core.models import AuditEvent, BillingCheckoutAttempt, PaymentEvent, PaymentHistory, Plan, Subscription
 from core.services.billing_providers.asaas import AsaasClient, AsaasError
 
 
 logger = logging.getLogger('billing.asaas')
-PLAN_CATALOG = {
-    'monthly': {'name': 'Mensal', 'price_cents': 14700, 'cycle': Plan.Cycle.MONTHLY, 'asaas_cycle': 'MONTHLY'},
-    'annual': {'name': 'Anual', 'price_cents': 99700, 'cycle': Plan.Cycle.YEARLY, 'asaas_cycle': 'YEARLY'},
-}
+PLANS = MappingProxyType({
+    'monthly': MappingProxyType({
+        'name': 'IAATENDE 2.0 - Plano Mensal',
+        'value': Decimal('147.00'),
+        'cycle': 'MONTHLY',
+    }),
+    'annual': MappingProxyType({
+        'name': 'IAATENDE 2.0 - Plano Anual',
+        'value': Decimal('997.00'),
+        'cycle': 'YEARLY',
+    }),
+})
 CONFIRMED_EVENTS = {'PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'}
 PENDING_EVENTS = {'PAYMENT_CREATED', 'PAYMENT_AWAITING_RISK_ANALYSIS'}
 OVERDUE_EVENTS = {'PAYMENT_OVERDUE'}
@@ -37,21 +47,24 @@ class BillingValidationError(ValueError):
 
 
 def commercial_plan(code):
-    definition = PLAN_CATALOG.get(code)
+    definition = PLANS.get(code)
     if definition is None:
         raise BillingValidationError('Plano inválido.')
+    display_name = 'Mensal' if code == 'monthly' else 'Anual'
+    model_cycle = Plan.Cycle.MONTHLY if definition['cycle'] == 'MONTHLY' else Plan.Cycle.YEARLY
     plan, _ = Plan.objects.update_or_create(
         code=code,
         defaults={
-            'name': definition['name'], 'price_cents': definition['price_cents'],
-            'billing_cycle': definition['cycle'], 'is_active': True,
+            'name': display_name, 'price_cents': int(definition['value'] * 100),
+            'billing_cycle': model_cycle, 'is_active': True,
         },
     )
     return plan
 
 
-def external_reference(subscription, plan):
-    return f'iaatende:company:{subscription.billing_reference}:plan:{plan.code}'
+def external_reference(subscription, plan, attempt=None):
+    reference = f'iaatende:company:{subscription.billing_reference}:plan:{plan.code}'
+    return f'{reference}:attempt:{attempt}' if attempt else reference
 
 
 def verify_webhook_token(received):
@@ -116,18 +129,35 @@ class AsaasBillingService:
                 },
             )
             now = timezone.now()
-            if billing_type == 'HOSTED' and subscription.provider_checkout_id and subscription.checkout_expires_at and subscription.checkout_expires_at > now:
-                return {
-                    'id': subscription.provider_checkout_id,
-                    'link': self.client.checkout_url(subscription.provider_checkout_id),
-                    'reused': True,
-                }
             reference = external_reference(subscription, plan)
             if billing_type == 'BOLETO':
                 customer = self._ensure_customer(empresa, subscription, reference, tax_id=tax_id)
                 return self._create_boleto(subscription, plan, customer, reference)
+            previous_checkout_id = subscription.provider_checkout_id
+            previous_plan_code = subscription.plan.code if subscription.plan_id else ''
+            if previous_checkout_id:
+                try:
+                    self.client.cancel_checkout(previous_checkout_id)
+                    logger.info(
+                        'asaas.checkout.canceled checkout_id=%s previous_plan=%s requested_plan=%s',
+                        previous_checkout_id, previous_plan_code, plan_code,
+                    )
+                except AsaasError as error:
+                    # Sessões concluídas, canceladas, expiradas ou pertencentes a
+                    # credencial antiga podem não aceitar cancelamento. Elas são
+                    # abandonadas localmente e jamais reutilizadas.
+                    logger.warning(
+                        'asaas.checkout.abandoned checkout_id=%s previous_plan=%s requested_plan=%s status=%s errors=%s',
+                        previous_checkout_id, previous_plan_code, plan_code,
+                        error.status_code, error.errors,
+                    )
+            attempt_id = uuid4()
+            reference = external_reference(subscription, plan, attempt_id)
+            definition = PLANS[plan_code]
             payload = {
-                'billingTypes': ['PIX', 'CREDIT_CARD'],
+                # O Checkout recorrente do Asaas aceita somente cartão. Pix exige
+                # cobrança DETACHED e não pode ser combinado com RECURRENT.
+                'billingTypes': ['CREDIT_CARD'],
                 'chargeTypes': ['RECURRENT'],
                 'minutesToExpire': settings.ASAAS_CHECKOUT_EXPIRES_IN,
                 'externalReference': reference,
@@ -136,31 +166,52 @@ class AsaasBillingService:
                     'expiredUrl': expired_url,
                 },
                 'items': [{
-                    'name': f'IAATENDE 2.0 - {plan.name}',
-                    'description': 'Assinatura do IAATENDE 2.0',
-                    'quantity': 1, 'value': float(Decimal(plan.price_cents) / 100),
-                    'externalReference': plan.code,
+                    'name': definition['name'],
+                    'description': f'Assinatura {plan.name.lower()} do IAATENDE 2.0',
+                    'quantity': 1, 'value': float(definition['value']),
                 }],
-                'customerData': {key: value for key, value in {
-                    'name': empresa.nome_dono or empresa.nome,
-                    'email': empresa.usuario.email,
-                    'phone': empresa.whatsapp_dono,
-                }.items() if value},
                 'subscription': {
-                    'cycle': PLAN_CATALOG[plan.code]['asaas_cycle'],
-                    'nextDueDate': timezone.localdate().isoformat(),
+                    'cycle': definition['cycle'],
+                    'nextDueDate': timezone.localtime(now).strftime('%Y-%m-%d %H:%M:%S'),
                 },
             }
+            logger.info(
+                'asaas.checkout.request payload=%s',
+                {
+                    'billingTypes': payload['billingTypes'], 'chargeTypes': payload['chargeTypes'],
+                    'minutesToExpire': payload['minutesToExpire'], 'callback': payload['callback'],
+                    'items': payload['items'], 'subscription': payload['subscription'],
+                    'externalReference': payload['externalReference'],
+                },
+            )
             data = self.client.create_checkout(payload)
             checkout_id = str(data.get('id') or '')
             if not checkout_id:
                 raise AsaasError('O Asaas não retornou o identificador do checkout.')
+            checkout_link = data.get('link') or self.client.checkout_url(checkout_id)
+            logger.info(
+                'asaas.checkout.response response=%s redirect_url=%s',
+                {'id': checkout_id, 'status': data.get('status'), 'link': data.get('link')},
+                checkout_link,
+            )
             subscription.plan = plan
             subscription.provider = Subscription.Provider.ASAAS
             subscription.provider_checkout_id = checkout_id
             subscription.checkout_expires_at = now + timedelta(minutes=settings.ASAAS_CHECKOUT_EXPIRES_IN)
             subscription.save()
-            return {'id': checkout_id, 'link': data.get('link') or self.client.checkout_url(checkout_id), 'reused': False}
+            if previous_checkout_id:
+                BillingCheckoutAttempt.objects.filter(
+                    provider_checkout_id=previous_checkout_id,
+                    status=BillingCheckoutAttempt.Status.PENDING,
+                ).update(status=BillingCheckoutAttempt.Status.ABANDONED)
+            BillingCheckoutAttempt.objects.create(
+                empresa=empresa, subscription=subscription,
+                provider=Subscription.Provider.ASAAS,
+                provider_checkout_id=checkout_id, external_reference=reference,
+                plan_code=plan.code, amount_cents=plan.price_cents,
+                cycle=definition['cycle'], expires_at=subscription.checkout_expires_at,
+            )
+            return {'id': checkout_id, 'link': checkout_link, 'reused': False}
 
     def _create_boleto(self, subscription, plan, customer, reference):
         if subscription.provider_subscription_id and subscription.plan_id == plan.id:
@@ -172,7 +223,7 @@ class AsaasBillingService:
             'customer': customer, 'billingType': 'BOLETO',
             'value': float(Decimal(plan.price_cents) / 100),
             'nextDueDate': timezone.localdate().isoformat(),
-            'cycle': PLAN_CATALOG[plan.code]['asaas_cycle'],
+            'cycle': PLANS[plan.code]['cycle'],
             'externalReference': reference,
         })
         subscription_id = str(data.get('id') or '')
@@ -244,21 +295,47 @@ class AsaasBillingService:
     @classmethod
     def _apply_event(cls, event, event_type, payment):
         reference = str(payment.get('externalReference') or '')
-        if not reference.startswith('iaatende:company:'):
-            event.status = PaymentEvent.Status.IGNORED
-            event.processed_at = timezone.now()
-            event.save(update_fields=['status', 'processed_at'])
-            return
-        parts = reference.split(':')
-        if len(parts) != 5 or parts[3] != 'plan':
+        payment_id = str(payment.get('id') or '')
+        if event_type.startswith('PAYMENT_') and not payment_id:
+            raise BillingValidationError('Pagamento sem identificador.')
+        checkout_id = str(payment.get('checkoutSession') or '')
+        if not checkout_id and payment_id and not reference:
+            remote_payment = AsaasClient().get_payment(payment_id)
+            if str(remote_payment.get('id') or '') != payment_id:
+                raise BillingValidationError('Pagamento divergente.')
+            checkout_id = str(remote_payment.get('checkoutSession') or '')
+            for field in ('customer', 'subscription', 'value'):
+                if payment.get(field) not in (None, '') and remote_payment.get(field) != payment.get(field):
+                    raise BillingValidationError(f'{field} divergente.')
+            payment = {**remote_payment, **payment, 'checkoutSession': checkout_id}
+
+        attempt = None
+        if checkout_id:
+            attempt = BillingCheckoutAttempt.objects.select_for_update().select_related(
+                'subscription__plan', 'empresa',
+            ).filter(provider=Subscription.Provider.ASAAS, provider_checkout_id=checkout_id).first()
+            if attempt is None:
+                raise BillingValidationError('Checkout não reconhecido.')
+            reference = attempt.external_reference
+        match = re.fullmatch(
+            r'iaatende:company:([0-9a-fA-F-]{36}):plan:(monthly|annual)(?::attempt:([0-9a-fA-F-]{36}))?',
+            reference,
+        )
+        if not match:
             raise BillingValidationError('Referência externa inválida.')
-        billing_reference, plan_code = parts[2], parts[4]
+        billing_reference, plan_code = match.group(1), match.group(2)
         subscription = Subscription.objects.select_for_update().select_related('plan', 'empresa').filter(
             billing_reference=billing_reference, provider=Subscription.Provider.ASAAS,
         ).first()
         if subscription is None:
             raise BillingValidationError('Assinatura não encontrada.')
         plan = commercial_plan(plan_code)
+        if attempt and (
+            attempt.subscription_id != subscription.pk or attempt.empresa_id != subscription.empresa_id
+            or attempt.plan_code != plan_code or attempt.amount_cents != plan.price_cents
+            or attempt.cycle != PLANS[plan_code]['cycle']
+        ):
+            raise BillingValidationError('Checkout divergente.')
         customer_id = str(payment.get('customer') or '')
         provider_subscription_id = str(payment.get('subscription') or '')
         if subscription.provider_customer_id and customer_id != subscription.provider_customer_id:
@@ -301,6 +378,10 @@ class AsaasBillingService:
             subscription.current_period_end = period_end
             subscription.last_payment_at = paid_at
             subscription.overdue_since = subscription.grace_period_ends_at = subscription.blocked_at = None
+            if attempt:
+                attempt.status = BillingCheckoutAttempt.Status.PAID
+                attempt.paid_at = paid_at
+                attempt.save(update_fields=['status', 'paid_at', 'updated_at'])
         elif event_type in OVERDUE_EVENTS:
             due_at = _parse_date(payment.get('dueDate')) or now
             subscription.status = Subscription.Status.GRACE
@@ -345,5 +426,6 @@ class AsaasBillingService:
             'payment': {key: payment.get(key) for key in (
                 'id', 'customer', 'subscription', 'externalReference', 'value',
                 'status', 'billingType', 'dueDate', 'paymentDate', 'confirmedDate',
+                'checkoutSession',
             )},
         }

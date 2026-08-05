@@ -1,0 +1,2 @@
+# Backup diário às 03:15. O arquivo de ambiente deve ter permissão 0600.
+15 3 * * * iaatende . /etc/iaatende/iaatende.env && BACKUP_DIR=/var/backups/iaatende /opt/iaatende/scripts/backup_postgres.sh >> /var/log/iaatende-backup.log 2>&1

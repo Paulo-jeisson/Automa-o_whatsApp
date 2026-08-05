@@ -1,2 +1,2 @@
-{% extends "base.html" %}{% block title %}Comparar versões | ZapFluxo{% endblock %}
+{% extends "base.html" %}{% block title %}Comparar versões | IAATENDE 2.0{% endblock %}
 {% block body %}<main class="ai-reference-page"><div class="ai-reference-container"><section class="reference-tab-area"><div class="reference-card diff-page"><h2>▤ Versão {{ left.version }} × Versão {{ right.version }}</h2><a class="btn btn-outline" href="{% url 'prompt_editor' %}">VOLTAR AO PROMPT DA IA</a><div class="diff-table">{{ diff|safe }}</div></div></section></div></main>{% endblock %}

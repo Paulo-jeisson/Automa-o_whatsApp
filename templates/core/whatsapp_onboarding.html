@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Conectar WhatsApp | ZapFluxo{% endblock %}
+{% block title %}Conectar WhatsApp | IAATENDE 2.0{% endblock %}
 {% block body %}
 <div class="app-shell">
   <aside class="sidebar">
-    <div class="brand"><span class="brand-mark">Z</span><div><strong>ZapFluxo</strong><small>Atendimento simples</small></div></div>
+    <div class="brand"><span class="brand-mark">IA</span><div><strong>IAATENDE 2.0</strong><small>Atendimento simples</small></div></div>
     <nav class="nav-list">
       <a class="nav-item" href="{% url 'dashboard' %}">Dashboard</a>
       <a class="nav-item" href="{% url 'atendimentos' %}">Atendimentos</a>
@@ -22,7 +22,7 @@
       <div class="onboarding-steps">
         <div><strong>1</strong><span>Entre com sua conta Meta</span></div>
         <div><strong>2</strong><span>Escolha a empresa e o WhatsApp</span></div>
-        <div><strong>3</strong><span>Autorize e volte ao ZapFluxo</span></div>
+        <div><strong>3</strong><span>Autorize e volte ao IAATENDE 2.0</span></div>
       </div>
       {% if embedded_signup_ready %}
         <button id="connect-whatsapp" class="btn btn-primary onboarding-button" type="button">Conectar com a Meta</button>
@@ -35,9 +35,9 @@
           <input type="hidden" name="phone_number_id" id="signup-phone">
         </form>
       {% else %}
-        <div class="alert">O Embedded Signup ainda não foi configurado pelo administrador do ZapFluxo.</div>
+        <div class="alert">O Embedded Signup ainda não foi configurado pelo administrador do IAATENDE 2.0.</div>
       {% endif %}
-      <p class="onboarding-privacy">O ZapFluxo não recebe sua senha da Meta. A autorização acontece na janela oficial e a credencial retornada é protegida no servidor.</p>
+      <p class="onboarding-privacy">O IAATENDE 2.0 não recebe sua senha da Meta. A autorização acontece na janela oficial e a credencial retornada é protegida no servidor.</p>
     </section>
   </main>
 </div>

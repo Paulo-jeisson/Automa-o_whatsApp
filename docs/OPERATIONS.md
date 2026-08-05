@@ -15,8 +15,8 @@ requisição. Falhas usam backoff exponencial e, após o limite, ficam com statu
 Instale e ative os timers:
 
 ```sh
-sudo systemctl enable --now zapfluxo-worker.timer
-sudo systemctl enable --now zapfluxo-monitor.timer
+sudo systemctl enable --now iaatende-worker.timer
+sudo systemctl enable --now iaatende-monitor.timer
 ```
 
 Comandos manuais:

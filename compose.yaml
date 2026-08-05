@@ -3,8 +3,8 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-zapfluxo}
-      POSTGRES_USER: ${POSTGRES_USER:-zapfluxo}
+      POSTGRES_DB: ${POSTGRES_DB:-iaatende}
+      POSTGRES_USER: ${POSTGRES_USER:-iaatende}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data

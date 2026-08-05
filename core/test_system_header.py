@@ -32,7 +32,7 @@ class SystemHeaderTests(TestCase):
         self.assertIn(f'href="{reverse("conversations_crm")}"', content)
         self.assertIn(f'href="{reverse("prompt_editor")}"', content)
         self.assertIn('id="system-page-content"', content)
-        self.assertIn("ZapFluxo-Menu", content)
+        self.assertIn("IAATENDE-Menu", content)
 
     def test_system_is_active_only_after_qr_connection_is_confirmed(self):
         session = WhatsAppSession.objects.create(

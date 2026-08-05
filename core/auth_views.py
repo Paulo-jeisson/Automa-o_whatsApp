@@ -16,7 +16,7 @@ class EmailLoginView(LoginView):
         return super().get_success_url()
 
 
-class ZapFluxoPasswordResetView(PasswordResetView):
+class IAAtendePasswordResetView(PasswordResetView):
     template_name = 'registration/password_reset_form.html'
     form_class = SingleEmailPasswordResetForm
     email_template_name = 'registration/password_reset_email.txt'

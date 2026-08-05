@@ -1,18 +1,18 @@
 [Unit]
-Description=ZapFluxo Gunicorn
+Description=IAATENDE 2.0 Gunicorn
 After=network.target postgresql.service
 
 [Service]
 Type=notify
-User=zapfluxo
+User=iaatende
 Group=www-data
-WorkingDirectory=/opt/zapfluxo
-EnvironmentFile=/etc/zapfluxo/zapfluxo.env
-RuntimeDirectory=zapfluxo
+WorkingDirectory=/opt/iaatende
+EnvironmentFile=/etc/iaatende/iaatende.env
+RuntimeDirectory=iaatende
 RuntimeDirectoryMode=0755
-ExecStart=/opt/zapfluxo/venv/bin/gunicorn \
+ExecStart=/opt/iaatende/venv/bin/gunicorn \
     --workers 3 \
-    --bind unix:/run/zapfluxo/gunicorn.sock \
+    --bind unix:/run/iaatende/gunicorn.sock \
     --access-logfile - \
     --error-logfile - \
     app.wsgi:application

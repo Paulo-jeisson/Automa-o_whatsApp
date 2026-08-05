@@ -21,7 +21,7 @@ class PRDSprintTwelveTests(TestCase):
 
     def test_container_runs_as_unprivileged_user_and_has_healthcheck(self):
         dockerfile = (Path(settings.BASE_DIR) / 'Dockerfile').read_text(encoding='utf-8')
-        self.assertIn('USER zapfluxo', dockerfile)
+        self.assertIn('USER iaatende', dockerfile)
         self.assertIn('HEALTHCHECK', dockerfile)
 
     def test_release_check_blocks_insecure_production_environment(self):

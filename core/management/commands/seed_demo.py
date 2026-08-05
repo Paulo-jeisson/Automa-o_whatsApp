@@ -12,7 +12,7 @@ from core.models import (
 
 
 class Command(BaseCommand):
-    help = 'Cria ou atualiza uma conta de demonstração completa do ZapFluxo.'
+    help = 'Cria ou atualiza uma conta de demonstração completa do IAATENDE 2.0.'
 
     def add_arguments(self, parser):
         parser.add_argument('--username', default='demo', help='Usuário da conta demo.')

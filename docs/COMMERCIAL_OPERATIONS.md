@@ -19,16 +19,17 @@ workers não possuem usuário autenticado.
 ## Checkout e métodos
 
 O backend aceita somente os códigos `monthly` e `annual`; preço e ciclo vêm do
-catálogo interno. Pix e cartão usam o Checkout hospedado Asaas (`RECURRENT`).
-Na versão atual da API, o Checkout hospedado documenta `PIX` e `CREDIT_CARD`, não
-boleto. Boleto usa a assinatura oficial `BOLETO` e redireciona para a `invoiceUrl`
+catálogo interno. O Checkout hospedado recorrente usa cartão (`CREDIT_CARD` +
+`RECURRENT`). A API Asaas rejeita Pix combinado com recorrência: Pix exige
+`DETACHED`, enquanto `RECURRENT` aceita somente cartão. Boleto usa a assinatura
+oficial `BOLETO` e redireciona para a `invoiceUrl`
 da primeira cobrança. Como a criação direta de cliente exige CPF/CNPJ, esse dado
 é solicitado somente no POST do boleto, enviado ao Asaas e não persistido pelo
-IAATENDE. No Checkout hospedado, a identificação é coletada pelo próprio Asaas e
+IAATENDE 2.0. No Checkout hospedado, a identificação é coletada pelo próprio Asaas e
 o `customer` retornado no webhook é associado à empresa. Nenhum dado bruto de
-cartão passa pelo IAATENDE.
+cartão passa pelo IAATENDE 2.0.
 
-Cartão pode renovar automaticamente. Pix e boleto geram cobranças futuras, mas
+Cartão pode renovar automaticamente. Boleto gera cobranças futuras, mas
 dependem de nova quitação pelo pagador. Nenhum método libera acesso enquanto a
 cobrança estiver pendente. O retorno do navegador apenas exibe o estado salvo;
 somente um webhook autenticado confirma acesso.
@@ -58,7 +59,7 @@ valor. Um evento duplicado não prolonga a vigência.
 ## Configuração Sandbox
 
 1. Crie uma chave no Sandbox Asaas.
-2. Gere um token de webhook aleatório e exclusivo do IAATENDE.
+2. Gere um token de webhook aleatório e exclusivo do IAATENDE 2.0.
 3. Preencha as variáveis `ASAAS_*` de `.env.example`.
 4. Cadastre `https://SEU-DOMINIO/webhooks/asaas/` no painel Asaas.
 5. Selecione os eventos listados acima.
@@ -72,7 +73,7 @@ valor. Um evento duplicado não prolonga a vigência.
 - suíte completa e testes Sandbox aprovados;
 - HTTPS, URLs de callback e host de produção revisados;
 - chave e token em cofre, sem presença em logs ou Git;
-- webhook IAATENDE separado de outros produtos na mesma conta;
+- webhook IAATENDE 2.0 separado de outros produtos na mesma conta;
 - alertas para eventos `FAILED`, indisponibilidade e divergência financeira;
 - reconciliação de cobranças e backup testados;
 - assinaturas Stripe legadas inventariadas e tratadas manualmente;

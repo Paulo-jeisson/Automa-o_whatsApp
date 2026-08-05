@@ -1,1 +1,1 @@
-"""Serviços de integração do ZapFluxo."""
+"""Serviços de integração do IAATENDE 2.0."""

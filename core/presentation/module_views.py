@@ -367,7 +367,7 @@ def analytics_dashboard(request):
 @login_required
 def analytics_export(request):
     empresa = _company(request)
-    response = HttpResponse(content_type='text/csv', headers={'Content-Disposition': 'attachment; filename="zapfluxo-dashboard.csv"'})
+    response = HttpResponse(content_type='text/csv', headers={'Content-Disposition': 'attachment; filename="iaatende-dashboard.csv"'})
     writer = csv.writer(response); writer.writerow(['Data', 'Conversas'])
     for row in DashboardAnalyticsService.build(empresa)['daily']: writer.writerow([row['date'], row['total']])
     return response

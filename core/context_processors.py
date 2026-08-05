@@ -1,9 +1,14 @@
 from core.access import company_for_user
 from core.models import WhatsAppSession
+from core.public_routes import PUBLIC_HTML_URL_NAMES
 
 
 def system_header(request):
     if not request.user.is_authenticated:
+        return {}
+    resolver_match = getattr(request, 'resolver_match', None)
+    if resolver_match and resolver_match.url_name in PUBLIC_HTML_URL_NAMES:
+        # Páginas públicas nunca recebem estado interno ou financeiro.
         return {}
     empresa = company_for_user(request.user)
     if empresa is None:

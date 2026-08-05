@@ -2,7 +2,7 @@
 
 ## Provider ativo e visível
 
-A interface do ZapFluxo utiliza somente a sessão `WhatsAppSession`, isolada por empresa e operada pela Evolution API. Configurações mostra apenas estado, número conectado, nome da instância, última conexão e o link **Gerenciar WhatsApp** para o fluxo de QR Code.
+A interface do IAATENDE 2.0 utiliza somente a sessão `WhatsAppSession`, isolada por empresa e operada pela Evolution API. Configurações mostra apenas estado, número conectado, nome da instância, última conexão e o link **Gerenciar WhatsApp** para o fluxo de QR Code.
 
 ## Elementos removidos da interface
 

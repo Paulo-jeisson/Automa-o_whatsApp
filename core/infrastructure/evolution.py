@@ -137,13 +137,18 @@ class EvolutionProvider:
     def _webhook_config():
         if not settings.EVOLUTION_WEBHOOK_SECRET:
             raise ProviderUnavailable('EVOLUTION_WEBHOOK_SECRET não configurado.')
-        webhook_url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/webhooks/evolution/"
+        webhook_url = settings.EVOLUTION_WEBHOOK_URL or (
+            f"{settings.PUBLIC_BASE_URL.rstrip('/')}/webhooks/evolution/"
+            if settings.PUBLIC_BASE_URL else ''
+        )
+        if not webhook_url:
+            raise ProviderUnavailable('EVOLUTION_WEBHOOK_URL não configurada.')
         return {
             'enabled': True,
             'url': webhook_url,
             'webhook_by_events': False,
             'webhook_base64': False,
-            'headers': {'x-zapfluxo-secret': settings.EVOLUTION_WEBHOOK_SECRET},
+            'headers': {'x-iaatende-secret': settings.EVOLUTION_WEBHOOK_SECRET},
             'events': [
                 'QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT',
                 'MESSAGES_UPDATE', 'SEND_MESSAGE',
@@ -220,7 +225,7 @@ class EvolutionProvider:
         secret = settings.EVOLUTION_WEBHOOK_SECRET
         if not secret:
             raise ProviderUnavailable('EVOLUTION_WEBHOOK_SECRET não configurado.')
-        supplied = headers.get('x-zapfluxo-secret', '')
+        supplied = headers.get('x-iaatende-secret', '')
         authorization = headers.get('authorization', '')
         signature = headers.get('x-evolution-signature', '')
         if hmac.compare_digest(supplied, secret) or hmac.compare_digest(authorization, f'Bearer {secret}'):

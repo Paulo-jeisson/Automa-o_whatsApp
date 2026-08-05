@@ -1,0 +1,10 @@
+[Unit]
+Description=Run IAATENDE 2.0 operational checks every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+Unit=iaatende-monitor.service
+
+[Install]
+WantedBy=timers.target

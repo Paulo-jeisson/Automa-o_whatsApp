@@ -1,14 +1,16 @@
-{% extends "base.html" %}
+{% extends "public_base.html" %}
 
-{% block title %}IAATENDE | Atendimento organizado pelo WhatsApp{% endblock %}
+{% block title %}IAATENDE 2.0 | Atendimento organizado pelo WhatsApp{% endblock %}
+{% block public_meta %}<link rel="canonical" href="{{ site_url }}/"><meta name="description" content="IAATENDE 2.0 organiza atendimentos, respostas e agendamentos pelo WhatsApp.">{% endblock %}
 
 {% block system_navigation %}{% endblock %}
+{% block system_alerts %}{% endblock %}
 
 {% block body %}
 <div class="landing-page">
   <header class="landing-header">
     <div class="landing-container landing-nav">
-      <a class="landing-brand ia-atende-brand" href="{% url 'landing_page' %}" aria-label="IA Atende, início">
+      <a class="landing-brand ia-atende-brand" href="{% url 'landing_page' %}" aria-label="IAATENDE 2.0, início">
         <span><em>IA</em> ATENDE</span><b>2.0</b>
       </a>
       <div class="landing-account-actions"><a class="btn landing-trial-button" href="{% url 'login' %}"><strong>TESTAR GRÁTIS — 3 DIAS</strong><small>SEM CARTÃO DE CRÉDITO</small></a></div>
@@ -26,10 +28,10 @@
           <div class="hero-trust" aria-label="Condições do teste"><span>Sem cartão de crédito</span><i>·</i><strong>Acesso completo imediato</strong><i>·</i><span>Sem compromisso</span></div>
         </div>
 
-        <div class="hero-preview hero-terminal" aria-label="Prévia do atendimento IAATENDE">
+        <div class="hero-preview hero-terminal" aria-label="Prévia do atendimento IAATENDE 2.0">
           <div class="terminal-bar">
             <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
-            <span class="terminal-title">IA ATENDE 2.0 WHATSAPP ONLINE</span>
+            <span class="terminal-title">IAATENDE 2.0 WHATSAPP ONLINE</span>
           </div>
           <div class="terminal-body">
             <div class="terminal-message bot-message">
@@ -107,7 +109,7 @@
           <article><span>✓</span><div><strong>Nenhum contato esquecido</strong><p>Veja novos atendimentos e acompanhe o status de cada um.</p></div></article>
           <article><span>✓</span><div><strong>Configuração rápida</strong><p>Personalize mensagens e opções para a rotina do seu negócio.</p></div></article>
           <article><span>✓</span><div><strong>Acesso de qualquer lugar</strong><p>Painel responsivo para usar no celular ou no computador.</p></div></article>
-          <article><span>✓</span><div><strong>Sem mudar sua operação</strong><p>O IAATENDE funciona de forma independente do seu sistema atual.</p></div></article>
+          <article><span>✓</span><div><strong>Sem mudar sua operação</strong><p>O IAATENDE 2.0 funciona de forma independente do seu sistema atual.</p></div></article>
         </div>
       </div>
     </section>
@@ -124,7 +126,7 @@
             <span class="plan-period">Mensal</span>
             <div class="price compact-price"><strong><small>R$</small>147</strong></div>
             <p class="plan-caption">por mês · renovação<br>automática</p>
-            <a class="btn btn-outline btn-block" href="{% if request.user.is_authenticated %}{% url 'planos' %}{% else %}{% url 'login' %}?next={% url 'planos' %}{% endif %}">Assinar</a>
+            {% if request.user.is_authenticated %}<form method="post" action="{% url 'subscription_checkout' 'monthly' %}">{% csrf_token %}<button class="btn btn-outline btn-block" type="submit">Assinar</button></form>{% else %}<a class="btn btn-outline btn-block" href="{% url 'login' %}?next={% url 'landing_page' %}%23planos">Assinar</a>{% endif %}
           </article>
           <article class="landing-card pricing-card pricing-card-compact annual-plan featured">
             <span class="popular-badge">Popular</span>
@@ -132,7 +134,7 @@
             <div class="price compact-price"><strong><small>R$</small>997</strong></div>
             <p class="installment">12x de R$83,08</p>
             <p class="plan-saving">Economize R$767 vs mensal</p>
-            <a class="btn btn-success btn-block" href="{% if request.user.is_authenticated %}{% url 'planos' %}{% else %}{% url 'login' %}?next={% url 'planos' %}{% endif %}">Assinar</a>
+            {% if request.user.is_authenticated %}<form method="post" action="{% url 'subscription_checkout' 'annual' %}">{% csrf_token %}<button class="btn btn-success btn-block" type="submit">Assinar</button></form>{% else %}<a class="btn btn-success btn-block" href="{% url 'login' %}?next={% url 'landing_page' %}%23planos">Assinar</a>{% endif %}
           </article>
         </div>
         <p class="pricing-guarantee">Garantia de 7 dias · Sem fidelidade · Cancele quando quiser</p>
@@ -141,7 +143,7 @@
 
     <section class="landing-cta">
       <div class="landing-container cta-inner">
-        <div><span class="landing-kicker">Comece agora</span><h2>Pronto para organizar seus atendimentos?</h2><p>Converse com a gente e veja como o IAATENDE pode funcionar no seu negócio.</p></div>
+        <div><span class="landing-kicker">Comece agora</span><h2>Pronto para organizar seus atendimentos?</h2><p>Converse com a gente e veja como o IAATENDE 2.0 pode funcionar no seu negócio.</p></div>
         {% if whatsapp_url %}<a class="btn btn-primary btn-large" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Falar no WhatsApp</a>{% else %}<a class="btn btn-primary btn-large" href="#planos">Ver planos</a>{% endif %}
       </div>
     </section>
@@ -149,10 +151,10 @@
 
   <footer class="landing-footer">
     <div class="landing-container">
-      <a class="landing-brand" href="{% url 'landing_page' %}"><span class="brand-mark">Z</span><span>IAATENDE</span></a>
+      <a class="landing-brand" href="{% url 'landing_page' %}"><span class="brand-mark">IA</span><span>IAATENDE 2.0</span></a>
       <p>Atendimentos organizados. Negócios mais ágeis.</p>
       <a href="{% url 'login' %}">Entrar no painel</a>
-      <span>© {% now "Y" %} IAATENDE</span>
+      <span>© {% now "Y" %} IAATENDE 2.0</span>
     </div>
   </footer>
 </div>

@@ -1,2 +1,0 @@
-# Backup diário às 03:15. O arquivo de ambiente deve ter permissão 0600.
-15 3 * * * zapfluxo . /etc/zapfluxo/zapfluxo.env && BACKUP_DIR=/var/backups/zapfluxo /opt/zapfluxo/scripts/backup_postgres.sh >> /var/log/zapfluxo-backup.log 2>&1

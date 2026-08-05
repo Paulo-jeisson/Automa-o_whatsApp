@@ -4,7 +4,7 @@ from core.services.queue import process_next
 
 
 class Command(BaseCommand):
-    help = 'Processa a fila persistente do ZapFluxo.'
+    help = 'Processa a fila persistente do IAATENDE 2.0.'
 
     def add_arguments(self, parser):
         parser.add_argument('--queue', default='default')

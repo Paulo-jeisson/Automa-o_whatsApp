@@ -1,11 +1,11 @@
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import update_session_auth_hash
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.contrib import messages
 from django.db import IntegrityError, transaction
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -112,11 +112,39 @@ def _public_attendance_url(request, empresa):
 
 
 def landing_page(request):
-    mensagem = 'Olá! Quero conhecer o ZapFluxo e automatizar meus atendimentos.'
-    whatsapp_url = build_contact_url(settings.ZAPFLUXO_WHATSAPP, mensagem)
+    mensagem = 'Olá! Quero conhecer o IAATENDE 2.0 e automatizar meus atendimentos.'
+    whatsapp_url = build_contact_url(settings.IAATENDE_WHATSAPP, mensagem)
     return render(request, 'core/landing_page.html', {
         'whatsapp_url': whatsapp_url,
+        'site_url': settings.SITE_URL,
     })
+
+
+def robots_txt(request):
+    content = '\n'.join([
+        'User-agent: *',
+        'Allow: /$',
+        'Allow: /politica-de-privacidade/',
+        'Allow: /termos-de-servico/',
+        'Disallow: /painel/',
+        'Disallow: /dashboard/',
+        'Disallow: /login/',
+        'Disallow: /cadastro/',
+        'Disallow: /assinatura/',
+        'Disallow: /webhooks/',
+        'Disallow: /admin/',
+        'Disallow: /api/',
+        f'Sitemap: {settings.SITE_URL}/sitemap.xml',
+        '',
+    ])
+    return HttpResponse(content, content_type='text/plain; charset=utf-8')
+
+
+def sitemap_xml(request):
+    urls = ('/', '/politica-de-privacidade/', '/termos-de-servico/')
+    entries = ''.join(f'<url><loc>{settings.SITE_URL}{path}</loc></url>' for path in urls)
+    content = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>'
+    return HttpResponse(content, content_type='application/xml; charset=utf-8')
 
 
 def cadastro(request):
@@ -200,7 +228,7 @@ def equipe(request):
         invitation.save()
         url = request.build_absolute_uri(reverse('aceitar_convite', args=[raw_token]))
         send_mail(
-            'Convite para o ZapFluxo',
+            'Convite para o IAATENDE 2.0',
             f'Você foi convidado para {empresa.nome}. Acesse: {url}',
             settings.DEFAULT_FROM_EMAIL,
             [invitation.email],
@@ -265,7 +293,7 @@ def planos(request):
 
 @login_required
 @require_POST
-def iniciar_checkout(request, plan_code):
+def subscription_checkout(request, plan_code):
     empresa = _empresa_do_usuario(request)
     require_permission(request.user, empresa, 'manage_billing')
     try:
@@ -274,18 +302,15 @@ def iniciar_checkout(request, plan_code):
             success_url=settings.ASAAS_CHECKOUT_SUCCESS_URL or request.build_absolute_uri(reverse('assinatura_retorno')),
             cancel_url=settings.ASAAS_CHECKOUT_CANCEL_URL or request.build_absolute_uri(reverse('assinatura_retorno')) + '?state=cancelled',
             expired_url=request.build_absolute_uri(reverse('assinatura_retorno')) + '?state=expired',
-            billing_type=request.POST.get('billing_type', 'HOSTED'),
-            tax_id=request.POST.get('tax_id', ''),
+            billing_type='HOSTED',
         )
     except BillingValidationError as error:
-        if plan_code not in {'monthly', 'annual'} or request.POST.get('billing_type', 'HOSTED') not in {'HOSTED', 'BOLETO'}:
+        if plan_code not in {'monthly', 'annual'}:
             record_audit(request, 'billing.plan_tampering', empresa=empresa, metadata={'plan_code': str(plan_code)[:30]})
             return JsonResponse({'detail': 'Plano ou forma de pagamento inválida.'}, status=404)
-        messages.error(request, str(error))
-        return redirect('planos')
+        return redirect(f"{reverse('landing_page')}#planos")
     except (ImproperlyConfigured, AsaasError):
-        messages.error(request, 'Cobrança temporariamente indisponível.')
-        return redirect('planos')
+        return redirect(f"{reverse('landing_page')}#planos")
     record_audit(
         request, 'billing.checkout_reused' if checkout.get('reused') else 'billing.checkout_requested',
         empresa=empresa, metadata={'plan_code': plan_code, 'checkout_id': checkout['id']},
@@ -337,6 +362,17 @@ def assinatura_status(request):
         'status': subscription.status if subscription else 'BLOCKED',
         'has_access': bool(subscription and subscription.has_access),
     })
+
+
+@login_required
+@require_POST
+def assinatura_finalizar(request):
+    empresa = _empresa_do_usuario(request)
+    subscription = EntitlementService.subscription(empresa)
+    if not subscription or not subscription.has_access:
+        return redirect('assinatura_retorno')
+    logout(request)
+    return redirect('login')
 
 
 @login_required

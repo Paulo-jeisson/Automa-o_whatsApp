@@ -49,7 +49,7 @@ class EvolutionWebhookTests(TestCase):
     def _post(self, payload, secret='webhook-secret'):
         return self.client.post(
             reverse('evolution_webhook'), data=json.dumps(payload),
-            content_type='application/json', HTTP_X_ZAPFLUXO_SECRET=secret,
+            content_type='application/json', HTTP_X_IAATENDE_SECRET=secret,
         )
 
     def test_webhook_rejects_invalid_secret(self):
@@ -287,7 +287,7 @@ class EvolutionOutboundTests(TestCase):
 class EvolutionProviderTests(TestCase):
     @override_settings(
         EVOLUTION_API_URL='https://evolution.test', EVOLUTION_API_KEY='key',
-        EVOLUTION_WEBHOOK_SECRET='secret', PUBLIC_BASE_URL='https://zapfluxo.test',
+        EVOLUTION_WEBHOOK_SECRET='secret', PUBLIC_BASE_URL='https://iaatende.test',
     )
     @patch('core.infrastructure.evolution.urlopen')
     def test_create_registers_secure_webhook_and_qr_events(self, urlopen_mock):
@@ -299,8 +299,8 @@ class EvolutionProviderTests(TestCase):
         snapshot = EvolutionProvider().create('instance-a')
         request = urlopen_mock.call_args.args[0]
         payload = json.loads(request.data)
-        self.assertEqual(payload['webhook']['url'], 'https://zapfluxo.test/webhooks/evolution/')
-        self.assertEqual(payload['webhook']['headers']['x-zapfluxo-secret'], 'secret')
+        self.assertEqual(payload['webhook']['url'], 'https://iaatende.test/webhooks/evolution/')
+        self.assertEqual(payload['webhook']['headers']['x-iaatende-secret'], 'secret')
         self.assertIn('MESSAGES_UPSERT', payload['webhook']['events'])
         self.assertTrue(snapshot.qr_code.startswith('data:image/png;base64,'))
 

@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
                 ('metadata', models.JSONField(blank=True, default=dict)),
                 ('ip_hash', models.CharField(blank=True, max_length=64)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('actor', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='zapfluxo_audit_events', to=settings.AUTH_USER_MODEL)),
+                ('actor', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='iaatende_audit_events', to=settings.AUTH_USER_MODEL)),
                 ('empresa', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='audit_events', to='core.empresacliente')),
             ],
             options={

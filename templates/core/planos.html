@@ -1,12 +1,29 @@
 {% extends 'base.html' %}
 {% block title %}Assinatura | IAATENDE 2.0{% endblock %}
 {% block body %}
-<main class="main-area"><header class="topbar"><div><span class="eyebrow">Assinatura</span><h1>Escolha seu plano</h1></div>{% if subscription %}<span class="status-pill">{{ subscription.get_status_display }}</span>{% endif %}</header>
-<section class="pricing-grid pricing-grid-compact billing-plans">
-{% for plan in plans %}<article class="landing-card pricing-card pricing-card-compact {% if plan.code == 'annual' %}annual-plan featured{% else %}monthly-plan{% endif %}">
-{% if plan.code == 'annual' %}<span class="popular-badge">Popular</span>{% endif %}<span class="plan-period">{{ plan.name }}</span>
-{% if plan.code == 'monthly' %}<div class="price compact-price"><strong><small>R$</small>147</strong></div><p class="plan-caption">por mês · renovação<br>automática</p>{% else %}<div class="price compact-price"><strong><small>R$</small>997</strong></div><p class="installment">12x de R$83,08</p><p class="plan-saving">Economize R$767 vs mensal</p>{% endif %}
-<form method="post" action="{% url 'iniciar_checkout' plan.code %}" class="billing-form">{% csrf_token %}<label class="sr-only" for="payment-{{ plan.code }}">Forma de pagamento</label><select id="payment-{{ plan.code }}" name="billing_type" class="billing-method"><option value="HOSTED">Pix ou cartão</option><option value="BOLETO">Boleto</option></select><label class="billing-tax-id" hidden>CPF/CNPJ para boleto<input name="tax_id" inputmode="numeric" autocomplete="off" maxlength="18"></label><button class="btn {% if plan.code == 'annual' %}btn-success{% else %}btn-outline{% endif %} btn-block" type="submit">Assinar</button></form>
-</article>{% endfor %}</section><p class="pricing-guarantee">Checkout seguro · Pix ou cartão · Liberação automática após confirmação</p></main>
+<main class="main-area">
+  <header class="topbar">
+    <div><span class="eyebrow">Assinatura</span><h1>Escolha seu plano</h1></div>
+    {% if subscription %}<span class="status-pill">{{ subscription.get_status_display }}</span>{% endif %}
+  </header>
+  <section class="pricing-grid pricing-grid-compact billing-plans">
+    <article class="landing-card pricing-card pricing-card-compact monthly-plan">
+      <span class="plan-period">Mensal</span>
+      <div class="price compact-price"><strong><small>R$</small>147</strong></div>
+      <p class="plan-caption">por mês · renovação<br>automática</p>
+      <form method="post" action="{% url 'subscription_checkout' 'monthly' %}">
+        {% csrf_token %}<button class="btn btn-outline btn-block" type="submit">Assinar</button>
+      </form>
+    </article>
+    <article class="landing-card pricing-card pricing-card-compact annual-plan featured">
+      <span class="popular-badge">Popular</span><span class="plan-period">Anual</span>
+      <div class="price compact-price"><strong><small>R$</small>997</strong></div>
+      <p class="installment">12x de R$83,08</p><p class="plan-saving">Economize R$767 vs mensal</p>
+      <form method="post" action="{% url 'subscription_checkout' 'annual' %}">
+        {% csrf_token %}<button class="btn btn-success btn-block" type="submit">Assinar</button>
+      </form>
+    </article>
+  </section>
+  <p class="pricing-guarantee">Checkout seguro do Asaas · Liberação automática após confirmação</p>
+</main>
 {% endblock %}
-{% block extra_js %}<script>document.querySelectorAll('.billing-form').forEach(form=>{const select=form.querySelector('select');const field=form.querySelector('.billing-tax-id');const sync=()=>{field.hidden=select.value!=='BOLETO';field.querySelector('input').required=select.value==='BOLETO'};select.addEventListener('change',sync);sync()})</script>{% endblock %}

@@ -26,7 +26,7 @@ from django.contrib.auth.views import (
 from django.urls import include, path
 
 from .health import health, live, ready
-from core.auth_views import EmailLoginView, ZapFluxoPasswordResetView
+from core.auth_views import EmailLoginView, IAAtendePasswordResetView
 
 urlpatterns = [
     path('health/', health, name='health'),
@@ -37,7 +37,7 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='logout'),
     path(
         'senha/recuperar/',
-        ZapFluxoPasswordResetView.as_view(),
+        IAAtendePasswordResetView.as_view(),
         name='password_reset',
     ),
     path(

@@ -10,7 +10,7 @@ O produto possui cobertura automatizada consistente, migrations aplicadas e
 hardening de produção sem erro crítico. Entretanto, os critérios externos e
 operacionais obrigatórios ainda não possuem evidência real suficiente. Esta
 classificação não impede piloto controlado sem cobrança, mas impede declarar o
-ZapFluxo um SaaS comercial completo.
+IAATENDE 2.0 um SaaS comercial completo.
 
 ## Evidências
 
