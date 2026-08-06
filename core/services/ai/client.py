@@ -5,7 +5,10 @@ from dataclasses import dataclass
 from django.conf import settings
 from openai import APIConnectionError, APITimeoutError, OpenAI, OpenAIError
 
-from .exceptions import AIConfigurationError, AIPermanentError, AIProviderError, AITemporaryError
+from .exceptions import (
+    AIAmbiguousResultError, AIConfigurationError, AIPermanentError,
+    AIProviderError, AITemporaryError,
+)
 
 
 logger = logging.getLogger('ai.provider')
@@ -78,7 +81,12 @@ class OpenAIClient:
                 response_input, response_output = self._usage(response)
                 total_input_tokens += response_input
                 total_output_tokens += response_output
-        except (APITimeoutError, APIConnectionError) as error:
+        except APITimeoutError as error:
+            logger.warning('ai.provider.ambiguous_timeout type=%s', type(error).__name__)
+            raise AIAmbiguousResultError(
+                'AI request timed out with a potentially billable result.',
+            ) from error
+        except APIConnectionError as error:
             logger.warning('ai.provider.unavailable type=%s', type(error).__name__)
             raise AITemporaryError('O serviço de IA está temporariamente indisponível.') from error
         except OpenAIError as error:

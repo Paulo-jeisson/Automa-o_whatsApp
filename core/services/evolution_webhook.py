@@ -10,7 +10,7 @@ from django.utils import timezone
 from core.domain.exceptions import ProviderUnavailable
 from core.infrastructure.evolution import EvolutionProvider
 from core.infrastructure.repositories import WhatsAppSessionRepository
-from core.models import Atendimento, Contato, Mensagem
+from core.models import Atendimento, BlockedInboundMessage, Contato, Mensagem
 from core.services.entitlements import EntitlementService
 from core.domain.exceptions import SubscriptionAccessDenied
 from core.services.observability import record_metric
@@ -47,10 +47,18 @@ class EvolutionWebhookService:
             raise EvolutionWebhookError('Instância desconhecida.')
         event_name = str(payload.get('event') or 'unknown').lower()
         event_id = self._event_id(payload)
+        data = payload.get('data') or {}
+        key = data.get('key') or {}
+        sender = normalize_phone_number(str(key.get('remoteJid') or data.get('sender') or ''))
+        conversation_key = (
+            f'company:{session.empresa_id}:whatsapp:{sender}'
+            if sender and ('messages.upsert' in event_name or event_name in {'message', 'messages'})
+            else ''
+        )
         enqueue(
             'evolution.webhook', {'session_id': session.pk, 'payload': payload},
             idempotency_key=f'evolution:{instance_name}:{event_name}:{event_id}',
-            queue='whatsapp', max_attempts=5,
+            queue='whatsapp', max_attempts=5, conversation_key=conversation_key,
         )
         logger.info(
             'whatsapp.webhook.enqueued company_id=%s instance=%s event=%s',
@@ -181,11 +189,6 @@ class EvolutionWebhookService:
         if key.get('fromMe') or data.get('fromMe'):
             self._reply_skip(session, message_id, 'message_from_me', 'messages.upsert')
             return None
-        try:
-            EntitlementService.require_company_access(session.empresa)
-        except SubscriptionAccessDenied:
-            self._reply_skip(session, message_id, 'subscription_blocked', 'messages.upsert')
-            return None
         remote_jid = str(key.get('remoteJid') or data.get('sender') or '')
         if not message_id:
             self._reply_skip(session, message_id, 'message_id_missing', 'messages.upsert')
@@ -196,6 +199,24 @@ class EvolutionWebhookService:
         whatsapp_id = normalize_phone_number(remote_jid)
         if not whatsapp_id:
             raise EvolutionWebhookError('Remetente inválido.')
+        try:
+            EntitlementService.require_company_access(session.empresa)
+        except SubscriptionAccessDenied:
+            message = data.get('message') or {}
+            BlockedInboundMessage.objects.get_or_create(
+                external_message_id=message_id,
+                defaults={
+                    'empresa': session.empresa,
+                    'contact_identifier': whatsapp_id[:64],
+                    'message_type': str(
+                        data.get('messageType') or self._detected_message_type(message) or 'unknown'
+                    )[:32],
+                    'reason': 'subscription_blocked',
+                    'received_at': self._timestamp(data.get('messageTimestamp')) or timezone.now(),
+                },
+            )
+            self._reply_skip(session, message_id, 'subscription_blocked', 'messages.upsert')
+            return None
         if (
             session.phone_number
             and brazilian_phone_variants(whatsapp_id)
@@ -276,6 +297,7 @@ class EvolutionWebhookService:
         enqueue(
             'whatsapp.automatic_reply', {'message_id': inbound.pk, 'company_id': session.empresa_id},
             idempotency_key=f'automatic-reply:{message_id}', queue='whatsapp', max_attempts=5,
+            conversation_key=f'company:{session.empresa_id}:attendance:{atendimento.pk}',
         )
         logger.info(
             'whatsapp.webhook.enqueued company_id=%s instance=%s event=automatic_reply message_id=%s',

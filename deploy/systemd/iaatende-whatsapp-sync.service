@@ -1,0 +1,14 @@
+[Unit]
+Description=Synchronize IAATENDE Evolution session states
+After=network.target iaatende.service
+
+[Service]
+Type=oneshot
+User=iaatende
+Group=www-data
+WorkingDirectory=/opt/iaatende
+EnvironmentFile=/etc/iaatende/iaatende.env
+ExecStart=/opt/iaatende/venv/bin/python manage.py sync_whatsapp_sessions
+TimeoutStartSec=120s
+StandardOutput=journal
+StandardError=journal

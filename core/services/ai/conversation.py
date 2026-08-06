@@ -6,12 +6,15 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from core.models import AIConfiguration, Atendimento
+from core.models import AIConfiguration, AIResponseDraft, Atendimento
 from core.services.entitlements import EntitlementService
 from django.core.exceptions import PermissionDenied
 
 from .agent import AIAgent
-from .exceptions import AIServiceError, AIPermanentError, AIProviderError, AITemporaryError
+from .exceptions import (
+    AIAmbiguousResultError, AIServiceError, AIPermanentError,
+    AIProviderError, AITemporaryError,
+)
 from .guardrails import (
     OUT_OF_SCOPE_MESSAGE,
     reject_adversarial_input,
@@ -52,6 +55,23 @@ class AIConversationService:
         configuration = self.is_enabled(atendimento)
         if configuration is None:
             return None
+        draft, created = AIResponseDraft.objects.get_or_create(
+            inbound_message=inbound_message,
+            defaults={
+                'empresa': atendimento.empresa,
+                'atendimento': atendimento,
+                'idempotency_key': f'ai-response:{inbound_message.external_message_id}',
+            },
+        )
+        if draft.status in {AIResponseDraft.Status.GENERATED, AIResponseDraft.Status.SENT}:
+            return draft.response_text
+        if draft.status == AIResponseDraft.Status.AMBIGUOUS:
+            raise AIAmbiguousResultError('Resultado anterior da IA é ambíguo; retry automático bloqueado.')
+        if not created and draft.status == AIResponseDraft.Status.GENERATING:
+            draft.status = AIResponseDraft.Status.AMBIGUOUS
+            draft.last_error = 'interrupted_while_generating'
+            draft.save(update_fields=['status', 'last_error', 'updated_at'])
+            raise AIAmbiguousResultError('Execução anterior interrompida durante a chamada de IA.')
         if reject_adversarial_input(inbound_message.texto):
             logger.warning(
                 'ai.input.rejected company_id=%s attendance_id=%s',
@@ -59,7 +79,15 @@ class AIConversationService:
             )
             return OUT_OF_SCOPE_MESSAGE
         try:
-            EntitlementService.consume(atendimento.empresa, 'ai_calls')
+            if not draft.quota_consumed:
+                with transaction.atomic():
+                    locked_draft = AIResponseDraft.objects.select_for_update().get(pk=draft.pk)
+                    if not locked_draft.quota_consumed:
+                        EntitlementService.consume(atendimento.empresa, 'ai_calls')
+                        locked_draft.quota_consumed = True
+                        locked_draft.status = AIResponseDraft.Status.GENERATING
+                        locked_draft.save(update_fields=['quota_consumed', 'status', 'updated_at'])
+                    draft.quota_consumed = locked_draft.quota_consumed
             response = self.agent.respond(
                 configuration=configuration,
                 atendimento=atendimento,
@@ -69,8 +97,32 @@ class AIConversationService:
                 atendimento, response=response,
                 latency_ms=int((time.monotonic() - started) * 1000),
             )
-            return validate_ai_output(response.text)
+            response_text = validate_ai_output(response.text)
+            draft.status = AIResponseDraft.Status.GENERATED
+            draft.response_text = response_text
+            draft.provider_response_id = response.provider_response_id
+            draft.last_error = ''
+            draft.save(update_fields=[
+                'status', 'response_text', 'provider_response_id', 'last_error', 'updated_at',
+            ])
+            return response_text
+        except AIAmbiguousResultError as error:
+            draft.status = AIResponseDraft.Status.AMBIGUOUS
+            draft.last_error = type(error).__name__
+            draft.save(update_fields=['status', 'last_error', 'updated_at'])
+            self._record_usage(
+                atendimento, error=error,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
+            logger.error(
+                'ai.conversation.ambiguous company_id=%s attendance_id=%s message_id=%s',
+                atendimento.empresa_id, atendimento.pk, inbound_message.external_message_id,
+            )
+            raise
         except (AITemporaryError, AIPermanentError) as error:
+            draft.status = AIResponseDraft.Status.FAILED
+            draft.last_error = type(error).__name__
+            draft.save(update_fields=['status', 'last_error', 'updated_at'])
             from core.services.observability import record_metric
             record_metric('ai.failure', empresa=atendimento.empresa, labels={'type': type(error).__name__})
             self._record_usage(

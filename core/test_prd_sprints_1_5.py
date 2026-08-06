@@ -9,6 +9,7 @@ from core.application.dto import PromptGeneratorInput
 from core.application.prompt_service import PromptGeneratorService
 from core.application.whatsapp_service import WhatsAppSessionService
 from core.domain.whatsapp import SessionSnapshot, SessionState
+from core.infrastructure.evolution import EvolutionRequestError
 from core.models import AIConfiguration, AIPromptVersion, AsyncJob, EmpresaCliente, WhatsAppSession
 from core.services.queue import process_job
 
@@ -35,6 +36,7 @@ class PRDSprintsOneToFiveTests(TestCase):
 
     def test_connect_persists_qr_and_state(self):
         provider = Mock()
+        provider.status.side_effect = EvolutionRequestError('missing', status_code=404)
         provider.create.return_value = SessionSnapshot(
             state=SessionState.WAITING_QR, qr_code='data:image/png;base64,abc', ping_ms=12,
         )

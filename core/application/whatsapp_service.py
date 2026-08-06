@@ -32,27 +32,67 @@ class WhatsAppSessionService:
 
     def connect(self, empresa):
         session = self.ensure(empresa)
-        session.state = SessionState.INITIALIZING
-        session.last_error = ''
-        session.save(update_fields=['state', 'last_error', 'updated_at'])
         try:
-            snapshot = self.provider.create(session.instance_name)
-            if not snapshot.qr_code and snapshot.state != SessionState.CONNECTED:
+            snapshot = self.provider.status(session.instance_name)
+            if snapshot.state == SessionState.CONNECTED:
+                self._apply(session, snapshot, preserve_existing=False)
+                self._event(session, 'ALREADY_CONNECTED', 'WhatsApp já está conectado.')
+                return session
+            snapshot = self.provider.reconnect(session.instance_name)
+            if snapshot.state not in {SessionState.CONNECTED, SessionState.CONNECTING} and not snapshot.qr_code:
                 snapshot = self.provider.qr_code(session.instance_name)
-            self._apply(session, snapshot)
-            self._event(session, 'QR_GENERATED', 'QR Code atualizado.')
+        except EvolutionRequestError as exc:
+            if exc.status_code != 404:
+                # A resposta "já existe" nunca prevalece sobre o estado real.
+                if exc.status_code in {400, 409}:
+                    return self.refresh(empresa)
+                return self._connection_failed(session, exc)
+            try:
+                snapshot = self.provider.create(session.instance_name)
+                if not snapshot.qr_code and snapshot.state != SessionState.CONNECTED:
+                    snapshot = self.provider.qr_code(session.instance_name)
+            except EvolutionRequestError as create_error:
+                if create_error.status_code in {400, 409}:
+                    return self.refresh(empresa)
+                return self._connection_failed(session, create_error)
+            except ProviderUnavailable as create_error:
+                return self._connection_failed(session, create_error)
         except ProviderUnavailable as exc:
+            return self._connection_failed(session, exc)
+        try:
+            self._apply(session, snapshot)
+            self._event(
+                session,
+                'QR_GENERATED' if session.qr_code else 'CONNECTION_SYNCED',
+                'QR Code atualizado.' if session.qr_code else 'Estado da conexão atualizado.',
+            )
+        except EvolutionRequestError as exc:
+            if exc.status_code == 404:
+                return self.connect(empresa)
             session.state = SessionState.ERROR
             session.last_error = str(exc)
             session.save(update_fields=['state', 'last_error', 'updated_at'])
-            self._event(session, 'ERROR', str(exc))
+        except ProviderUnavailable as exc:
+            return self._connection_failed(session, exc)
+        return session
+
+    def _connection_failed(self, session, exc):
+        session.state = SessionState.ERROR
+        session.last_error = str(exc)
+        session.save(update_fields=['state', 'last_error', 'updated_at'])
+        self._event(session, 'ERROR', str(exc))
         return session
 
     def refresh(self, empresa):
         session = self.ensure(empresa)
+        previous_state = session.state
         try:
             snapshot = self.provider.status(session.instance_name)
             self._apply(session, snapshot)
+            if previous_state != session.state:
+                self._event(session, 'STATE_CHANGED', f'{previous_state} → {session.state}', {
+                    'previous_state': previous_state, 'state': session.state,
+                })
             self._event(session, 'HEARTBEAT', 'Sessão sincronizada.', {'ping_ms': snapshot.ping_ms})
         except ProviderUnavailable as exc:
             session.state = SessionState.ERROR
@@ -66,7 +106,12 @@ class WhatsAppSessionService:
         session.reconnect_attempts += 1
         session.save(update_fields=['state', 'reconnect_attempts', 'updated_at'])
         try:
-            self._apply(session, self.provider.reconnect(session.instance_name))
+            snapshot = self.provider.status(session.instance_name)
+            if snapshot.state != SessionState.CONNECTED:
+                snapshot = self.provider.reconnect(session.instance_name)
+            if snapshot.state not in {SessionState.CONNECTED, SessionState.CONNECTING} and not snapshot.qr_code:
+                snapshot = self.provider.qr_code(session.instance_name)
+            self._apply(session, snapshot, preserve_existing=False)
             self._event(session, 'RECONNECT', 'Reconexão solicitada.')
         except ProviderUnavailable as exc:
             session.state = SessionState.ERROR

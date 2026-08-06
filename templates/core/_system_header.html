@@ -10,6 +10,15 @@
   <section class="reference-card global-qr-card" id="whatsapp-qr">
     <header><h2><span class="step-badge">PASSO 1</span><span>▯ CONECTAR WHATSAPP</span></h2><a class="btn btn-primary" href="#whatsapp-qr">◉ APRENDA A CONFIGURAR</a></header>
     <div class="global-qr-stage">{% if system_header_session.qr_code %}<img src="{{ system_header_session.qr_code }}" alt="QR Code para conectar o WhatsApp">{% elif system_header_session.state == 'CONNECTED' %}<div class="global-connected-state">✓<strong>WHATSAPP CONECTADO</strong><small>{{ system_header_session.phone_number }}</small></div>{% else %}<div class="global-qr-placeholder"><span>QR</span><small>Gere um código para iniciar</small></div>{% endif %}</div>
-    <div class="global-qr-actions"><form method="post" action="{% url 'whatsapp_action' 'connect' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}#whatsapp-qr"><button class="btn btn-primary" type="submit">📱 GERAR QR CODE</button></form><form method="post" action="{% url 'whatsapp_action' 'clear' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}#whatsapp-qr"><button class="btn qr-clear-button" type="submit">LIMPAR SESSÃO E TENTAR</button></form></div><p class="global-qr-help">Se o QR não aparecer ou não conectar, use “Limpar sessão e tentar”</p>
+    <div class="global-qr-actions">
+      {% if system_header_session.state == 'CONNECTED' %}
+      <form method="post" action="{% url 'whatsapp_action' 'refresh' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}#whatsapp-qr"><button class="btn btn-primary" type="submit">VERIFICAR CONEXÃO</button></form>
+      {% elif system_header_session.state == 'OFFLINE' or system_header_session.state == 'ERROR' %}
+      <form method="post" action="{% url 'whatsapp_action' 'reconnect' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}#whatsapp-qr"><button class="btn btn-primary" type="submit">RECONECTAR</button></form>
+      {% else %}
+      <form method="post" action="{% url 'whatsapp_action' 'connect' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}#whatsapp-qr"><button class="btn btn-primary" type="submit">📱 GERAR QR CODE</button></form>
+      {% endif %}
+      <details class="global-qr-advanced"><summary>Ações avançadas</summary><form method="post" action="{% url 'whatsapp_action' 'clear' %}" onsubmit="return confirm('Esta ação desconecta o WhatsApp e exigirá um novo QR Code. Continuar?');">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}#whatsapp-qr"><button class="btn qr-clear-button" type="submit">LIMPAR SESSÃO</button></form></details>
+    </div><p class="global-qr-help">A sessão permanece conectada mesmo com o navegador fechado.</p>
   </section>
 </div>

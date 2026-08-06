@@ -1,5 +1,7 @@
 import logging
 import time
+import hashlib
+from contextlib import contextmanager
 from datetime import timedelta
 
 from django.conf import settings
@@ -13,6 +15,24 @@ from core.models import AsyncJob, Mensagem
 logger = logging.getLogger('queue')
 DATABASE_LOCK_RETRIES = 3
 DATABASE_LOCK_RETRY_SECONDS = 0.05
+
+
+@contextmanager
+def _conversation_lock(conversation_key):
+    """Serialize one conversation while allowing unrelated conversations in parallel."""
+    if not conversation_key or connection.vendor != 'postgresql':
+        yield
+        return
+    lock_id = int.from_bytes(
+        hashlib.sha256(conversation_key.encode('utf-8')).digest()[:8], 'big', signed=True,
+    )
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_advisory_lock(%s)', [lock_id])
+    try:
+        yield
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT pg_advisory_unlock(%s)', [lock_id])
 
 
 def _is_database_locked(error):
@@ -32,14 +52,17 @@ def _retry_database_locked(operation, *, job_id=None):
             time.sleep(DATABASE_LOCK_RETRY_SECONDS * retry)
 
 
-def enqueue(task_name, payload, *, idempotency_key, queue='default', max_attempts=5):
+def enqueue(
+    task_name, payload, *, idempotency_key, queue='default', max_attempts=5,
+    conversation_key='',
+):
     """Persist an idempotent pending job; workers are the only executors."""
     def create_job():
         return AsyncJob.objects.get_or_create(
             idempotency_key=idempotency_key,
             defaults={
                 'task_name': task_name, 'payload': payload, 'queue': queue,
-                'max_attempts': max_attempts,
+                'max_attempts': max_attempts, 'conversation_key': conversation_key,
             },
         )
 
@@ -64,6 +87,16 @@ def _claim_job(job_id):
                 or job.available_at > timezone.now()
             ):
                 return None
+            if job.conversation_key and AsyncJob.objects.filter(
+                conversation_key=job.conversation_key,
+                pk__lt=job.pk,
+                status__in=[
+                    AsyncJob.Status.PENDING, AsyncJob.Status.RETRY,
+                    AsyncJob.Status.PROCESSING,
+                ],
+            ).exists():
+                return None
+            now = timezone.now()
             claimed = AsyncJob.objects.filter(
                 pk=job.pk,
                 status__in=[AsyncJob.Status.PENDING, AsyncJob.Status.RETRY],
@@ -71,13 +104,48 @@ def _claim_job(job_id):
             ).update(
                 status=AsyncJob.Status.PROCESSING,
                 attempts=F('attempts') + 1,
-                locked_at=timezone.now(),
+                locked_at=now,
+                lease_expires_at=now + timedelta(seconds=settings.TASK_QUEUE_LEASE_SECONDS),
             )
             if not claimed:
                 return None
         return AsyncJob.objects.get(pk=job_id)
 
     return _retry_database_locked(claim, job_id=job_id)
+
+
+def recover_expired_jobs(*, queue=None):
+    """Return only expired leases to RETRY; active workers keep their jobs."""
+    now = timezone.now()
+    recovered = dead = 0
+    with transaction.atomic():
+        jobs = AsyncJob.objects.select_for_update().filter(
+            status=AsyncJob.Status.PROCESSING,
+            lease_expires_at__isnull=False,
+            lease_expires_at__lte=now,
+        )
+        if queue:
+            jobs = jobs.filter(queue=queue)
+        for job in jobs:
+            job.last_error = 'Worker lease expired before completion.'
+            job.locked_at = None
+            job.lease_expires_at = None
+            if job.attempts >= job.max_attempts:
+                job.status = AsyncJob.Status.DEAD
+                dead += 1
+            else:
+                job.status = AsyncJob.Status.RETRY
+                job.available_at = now + timedelta(seconds=settings.TASK_QUEUE_BACKOFF)
+                recovered += 1
+            job.save(update_fields=[
+                'status', 'available_at', 'locked_at', 'lease_expires_at', 'last_error',
+            ])
+            logger.warning(
+                'queue.lease.expired job_id=%s task=%s status=%s attempt=%s queue=%s',
+                job.pk, job.task_name, job.status, job.attempts, job.queue,
+            )
+    logger.warning('queue.lease.recovered recovered=%s dead=%s queue=%s', recovered, dead, queue or 'all')
+    return recovered, dead
 
 
 def process_job(job_id):
@@ -93,7 +161,8 @@ def _run_claimed_job(job):
         job.pk, job.task_name, job.attempts,
     )
     try:
-        dispatch_result = _dispatch(job.task_name, job.payload)
+        with _conversation_lock(job.conversation_key):
+            dispatch_result = _dispatch(job.task_name, job.payload)
     except Exception as error:
         database_locked = isinstance(error, OperationalError) and _is_database_locked(error)
         if database_locked:
@@ -118,8 +187,10 @@ def _run_claimed_job(job):
                 )
             )
             job.available_at = timezone.now() + timedelta(seconds=delay)
+        job.lease_expires_at = None
+        job.locked_at = None
         _retry_database_locked(
-            lambda: job.save(update_fields=['status', 'available_at', 'last_error']),
+            lambda: job.save(update_fields=['status', 'available_at', 'last_error', 'locked_at', 'lease_expires_at']),
             job_id=job.pk,
         )
         if exhausted:
@@ -128,8 +199,10 @@ def _run_claimed_job(job):
     job.status = AsyncJob.Status.COMPLETED
     job.completed_at = timezone.now()
     job.last_error = ''
+    job.locked_at = None
+    job.lease_expires_at = None
     _retry_database_locked(
-        lambda: job.save(update_fields=['status', 'completed_at', 'last_error']),
+        lambda: job.save(update_fields=['status', 'completed_at', 'last_error', 'locked_at', 'lease_expires_at']),
         job_id=job.pk,
     )
     logger.info(

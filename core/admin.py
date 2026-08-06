@@ -27,6 +27,8 @@ from .models import (
     OperationalAlert,
     OperationalMetric,
     AIUsageRecord,
+    AIResponseDraft,
+    BlockedInboundMessage,
     DataRetentionPolicy,
     DataSubjectRequest,
     MetaOnboardingVerification,
@@ -53,6 +55,8 @@ admin.site.register(AsyncJob)
 admin.site.register(OperationalMetric)
 admin.site.register(OperationalAlert)
 admin.site.register(AIUsageRecord)
+admin.site.register(AIResponseDraft)
+admin.site.register(BlockedInboundMessage)
 admin.site.register(DataRetentionPolicy)
 admin.site.register(DataSubjectRequest)
 admin.site.register(MetaOnboardingVerification)

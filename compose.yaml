@@ -33,7 +33,13 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: db
-    command: ["sh", "-c", "while true; do python manage.py process_jobs --queue whatsapp --limit 500; sleep 5; done"]
+    command: ["python", "manage.py", "run_worker", "--queue", "whatsapp"]
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,sys; sys.exit(0 if b'run_worker' in pathlib.Path('/proc/1/cmdline').read_bytes() else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       db:
         condition: service_healthy
@@ -44,6 +50,8 @@ services:
     environment:
       POSTGRES_HOST: db
     command: ["sh", "-c", "while true; do python manage.py check_operations; sleep 60; done"]
+    healthcheck:
+      disable: true
     depends_on:
       db:
         condition: service_healthy

@@ -9,7 +9,7 @@ from django.db import connection
 from django.db.models import Count
 from django.utils import timezone
 
-from core.models import AsyncJob, Mensagem, OperationalAlert, OperationalMetric
+from core.models import AsyncJob, Mensagem, OperationalAlert, OperationalMetric, WhatsAppSession
 
 
 logger = logging.getLogger('observability')
@@ -54,6 +54,24 @@ def run_operational_checks(now=None):
     ).count()
     if queued:
         alerts.append(raise_alert('queue_backlog', f'{queued} job(s) atrasado(s) na fila.', fingerprint='queue-backlog'))
+
+    stuck = AsyncJob.objects.filter(
+        status=AsyncJob.Status.PROCESSING, lease_expires_at__lt=now,
+    ).count()
+    if stuck:
+        alerts.append(raise_alert(
+            'queue_stuck', f'{stuck} job(s) com lease expirado.',
+            severity='CRITICAL', fingerprint='queue-stuck',
+        ))
+
+    offline = WhatsAppSession.objects.filter(
+        empresa__ativa=True, state__in=['OFFLINE', 'ERROR'],
+    ).count()
+    if offline:
+        alerts.append(raise_alert(
+            'whatsapp_sessions_offline', f'{offline} sessão(ões) WhatsApp offline.',
+            fingerprint='whatsapp-sessions-offline',
+        ))
 
     dead = AsyncJob.objects.filter(status=AsyncJob.Status.DEAD, created_at__gte=now - timedelta(hours=1)).count()
     if dead:

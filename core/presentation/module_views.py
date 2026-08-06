@@ -35,7 +35,7 @@ def _company(request):
 
 @login_required
 def whatsapp_dashboard(request):
-    _company(request)
+    WhatsAppSessionService().refresh(_company(request))
     return redirect(f"{reverse('prompt_generator')}#whatsapp-qr")
 
 
@@ -61,7 +61,9 @@ def whatsapp_action(request, action):
             'device_name': session.device_name, 'ping_ms': session.ping_ms,
             'last_error': session.last_error,
         })
-    if session.last_error:
+    if session.state == 'CONNECTED' and action == 'connect':
+        messages.info(request, 'WhatsApp já está conectado.')
+    elif session.last_error:
         messages.error(request, session.last_error)
     else:
         messages.success(request, 'Sessão WhatsApp atualizada.')

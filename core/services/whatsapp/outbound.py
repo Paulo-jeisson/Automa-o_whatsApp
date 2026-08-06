@@ -12,6 +12,8 @@ from core.models import (
     WhatsAppSession,
 )
 from core.services.ai.conversation import AIConversationService
+from core.services.ai.gateway import CompanyAIGateway
+from core.services.ai.exceptions import AIAmbiguousResultError
 from core.services.entitlements import EntitlementService
 from core.services.pass_numbers import is_pass_number
 
@@ -263,7 +265,18 @@ def send_automatic_reply(inbound_message):
 
     supported_text = inbound_message.tipo == 'text' and bool(inbound_message.texto)
     try:
-        response_text = AIConversationService().reply(inbound_message=inbound_message) if supported_text else None
+        response_text = CompanyAIGateway().reply(inbound_message=inbound_message) if supported_text else None
+    except AIAmbiguousResultError:
+        AIConversationService._handoff(
+            atendimento, 'Resultado da IA incerto; revisão humana necessária.',
+        )
+        log_reply_skip(
+            company_id=inbound_message.empresa_id,
+            attendance_id=atendimento.pk,
+            message_id=inbound_message.external_message_id,
+            reason='ai_ambiguous_result', stage='worker_ai',
+        )
+        return None
     except Exception:
         logger.info(
             'whatsapp.reply.end company_id=%s attendance_id=%s message_id=%s outcome=error stage=ai',
@@ -336,6 +349,9 @@ def send_automatic_reply(inbound_message):
                 return None
             outbound_message = send_text_for_attendance(locked, response_text)
     except (WhatsAppAPIError, WhatsAppProviderError):
+        if ai_generated:
+            # A resposta já está persistida; o retry repetirá somente o envio.
+            raise
         AIConversationService._handoff(
             atendimento,
             'Falha ao enviar resposta pela Evolution API.',
@@ -355,6 +371,11 @@ def send_automatic_reply(inbound_message):
         atendimento.pk,
         outbound_message.external_message_id,
     )
+    if ai_generated:
+        from core.models import AIResponseDraft
+        AIResponseDraft.objects.filter(inbound_message=inbound_message).update(
+            status=AIResponseDraft.Status.SENT,
+        )
     logger.info(
         'whatsapp.reply.reason company_id=%s attendance_id=%s message_id=%s reason=eligible_user_message stage=worker',
         inbound_message.empresa_id, atendimento.pk, inbound_message.external_message_id,

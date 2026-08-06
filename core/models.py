@@ -1058,13 +1058,18 @@ class AsyncJob(models.Model):
     max_attempts = models.PositiveIntegerField(default=5)
     available_at = models.DateTimeField(default=timezone.now, db_index=True)
     locked_at = models.DateTimeField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    conversation_key = models.CharField(max_length=255, blank=True, db_index=True)
     last_error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['available_at', 'id']
-        indexes = [models.Index(fields=['queue', 'status', 'available_at'])]
+        indexes = [
+            models.Index(fields=['queue', 'status', 'available_at']),
+            models.Index(fields=['conversation_key', 'status', 'created_at']),
+        ]
 
 
 class OperationalMetric(models.Model):
@@ -1144,6 +1149,53 @@ class MetaOnboardingVerification(models.Model):
     verified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     notes = models.TextField(blank=True)
     verified_at = models.DateTimeField(auto_now_add=True)
+
+
+class BlockedInboundMessage(models.Model):
+    """Minimal, content-safe audit record for messages rejected by entitlement."""
+
+    empresa = models.ForeignKey(
+        EmpresaCliente, on_delete=models.CASCADE, related_name='blocked_inbound_messages',
+    )
+    external_message_id = models.CharField(max_length=255, unique=True)
+    contact_identifier = models.CharField(max_length=64, blank=True)
+    message_type = models.CharField(max_length=32, default='unknown')
+    reason = models.CharField(max_length=80, default='subscription_blocked')
+    received_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['empresa', '-received_at'])]
+
+
+class AIResponseDraft(models.Model):
+    class Status(models.TextChoices):
+        GENERATING = 'GENERATING', 'Gerando'
+        GENERATED = 'GENERATED', 'Gerada'
+        AMBIGUOUS = 'AMBIGUOUS', 'Resultado ambíguo'
+        FAILED = 'FAILED', 'Falhou'
+        SENT = 'SENT', 'Enviada'
+
+    empresa = models.ForeignKey(
+        EmpresaCliente, on_delete=models.CASCADE, related_name='ai_response_drafts',
+    )
+    atendimento = models.ForeignKey(
+        Atendimento, on_delete=models.CASCADE, related_name='ai_response_drafts',
+    )
+    inbound_message = models.OneToOneField(
+        Mensagem, on_delete=models.CASCADE, related_name='ai_response_draft',
+    )
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.GENERATING)
+    response_text = models.TextField(blank=True)
+    provider_response_id = models.CharField(max_length=120, blank=True)
+    quota_consumed = models.BooleanField(default=False)
+    last_error = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['empresa', 'status', '-created_at'])]
 
 
 class AIUsageRecord(models.Model):

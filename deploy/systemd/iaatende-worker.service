@@ -3,12 +3,19 @@ Description=IAATENDE 2.0 persistent queue worker
 After=network.target iaatende.service
 
 [Service]
-Type=oneshot
+Type=simple
 User=iaatende
 Group=www-data
 WorkingDirectory=/opt/iaatende
 EnvironmentFile=/etc/iaatende/iaatende.env
-ExecStart=/opt/iaatende/venv/bin/python manage.py process_jobs --queue whatsapp --limit 500
+ExecStart=/opt/iaatende/venv/bin/python manage.py run_worker --queue whatsapp
+Restart=always
+RestartSec=3s
+TimeoutStopSec=45s
+KillSignal=SIGTERM
+MemoryMax=768M
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

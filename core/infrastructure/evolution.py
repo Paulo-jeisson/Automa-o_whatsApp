@@ -181,7 +181,7 @@ class EvolutionProvider:
 
     def restart(self, instance_name):
         self._request('PUT', f'/instance/restart/{instance_name}')
-        return self.qr_code(instance_name)
+        return self.status(instance_name)
 
     def logout(self, instance_name):
         self._request('DELETE', f'/instance/logout/{instance_name}')

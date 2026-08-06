@@ -14,6 +14,10 @@ class AITemporaryError(AIProviderError):
     """Falha recuperável que deve seguir a política de retry do worker."""
 
 
+class AIAmbiguousResultError(AITemporaryError):
+    """The provider may have completed a billable request before timeout."""
+
+
 class AIPermanentError(AIProviderError):
     """Falha não recuperável que ainda respeita o limite uniforme do worker."""
 
