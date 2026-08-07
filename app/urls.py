@@ -29,6 +29,7 @@ from .health import health, live, ready
 from core.auth_views import EmailLoginView, IAAtendePasswordResetView
 
 urlpatterns = [
+    path('platform/', include('platform_panel.urls')),
     path('health/', health, name='health'),
     path('health/live/', live, name='health_live'),
     path('health/ready/', ready, name='health_ready'),

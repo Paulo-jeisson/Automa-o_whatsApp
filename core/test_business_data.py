@@ -217,7 +217,10 @@ class BusinessDataTests(TestCase):
         )
         self.assertEqual(
             [item['dados'] for item in result['resultados']],
-            [{'Nome': 'Paulo'}, {'Nome': 'Ana'}],
+            [
+                {'Nome': 'Paulo', 'Telefone': '1111'},
+                {'Nome': 'Ana', 'Telefone': '2222'},
+            ],
         )
         self.assertTrue(all(item['base'] == 'dados' for item in result['resultados']))
 
@@ -245,27 +248,32 @@ class BusinessDataTests(TestCase):
             'pesquisar_dados_negocio',
             {'consulta': 'Qual problema do meu carro? Sou Paulo, dono do Fiat 2016'},
         )
-        self.assertEqual(result['resultados'][0]['dados'], {'Problema': 'Retriuvi'})
+        self.assertEqual(result['resultados'][0]['dados'], {
+            'Nome': 'Paulo', 'Marca': 'Fiat', 'Ano': '2016', 'Problema': 'Retriuvi',
+        })
 
     def test_restaurant_menu_is_available_to_whatsapp_ai(self):
         source = BusinessDataSource.objects.create(
             empresa=self.company, name='Cardápio de hoje', data_type='PRODUCT',
-            source_filename='cardapio.xlsx', columns=['Prato', 'Preço'],
+            source_filename='cardapio.xlsx', columns=['Prato', 'Preço', 'Custo interno'],
             ai_visible_columns=['Prato', 'Preço'], row_count=2,
         )
         for row, prato, preco in [(2, 'Feijoada', '29.90'), (3, 'Lasanha', '25.00')]:
             BusinessDataRecord.objects.create(
                 empresa=self.company, source=source, row_number=row,
-                data={'Prato': prato, 'Preço': preco},
+                data={'Prato': prato, 'Preço': preco, 'Custo interno': '10.00'},
                 searchable_text=f'{prato} {preco}'.casefold(),
             )
         attendance = Atendimento.objects.create(
             empresa=self.company, nome_cliente='Cliente', telefone_cliente='5511888333333',
         )
         result = AIToolExecutor(atendimento=attendance).execute(
-            'pesquisar_dados_negocio', {'consulta': 'Qual é o cardápio de hoje?'},
+            'pesquisar_dados_negocio', {'consulta': 'Quais são os preços do cardápio?'},
         )
         self.assertEqual(
-            [item['dados']['Prato'] for item in result['resultados']],
-            ['Feijoada', 'Lasanha'],
+            [item['dados'] for item in result['resultados']],
+            [
+                {'Prato': 'Feijoada', 'Preço': '29.90'},
+                {'Prato': 'Lasanha', 'Preço': '25.00'},
+            ],
         )

@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -34,10 +35,38 @@ class EvolutionSendResult:
 class EvolutionRequestError(ProviderUnavailable):
     """Evolution failure with safe HTTP context for service orchestration."""
 
-    def __init__(self, message, *, status_code=None, path=''):
+    def __init__(self, message, *, status_code=None, path='', provider_code='', provider_message='', safe_payload=None):
         super().__init__(message)
         self.status_code = status_code
         self.path = path
+        self.provider_code = provider_code
+        self.provider_message = provider_message
+        self.safe_payload = safe_payload or {}
+
+
+SENSITIVE_KEYS = {'apikey', 'api_key', 'authorization', 'token', 'cookie', 'qrcode', 'qr_code', 'base64', 'secret', 'headers'}
+
+
+def sanitize_provider_error(raw, secrets=()):
+    try:
+        data = json.loads(raw.decode('utf-8', errors='replace')) if raw else {}
+    except (json.JSONDecodeError, AttributeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    def clean(value, key=''):
+        lowered = key.lower()
+        if lowered in SENSITIVE_KEYS or any(part in lowered for part in ('token', 'secret', 'auth', 'cookie', 'base64', 'qr')):
+            return '[REDACTED]'
+        if isinstance(value, dict):
+            return {str(k)[:60]: clean(v, str(k)) for k, v in list(value.items())[:20]}
+        if isinstance(value, list):
+            return [clean(item) for item in value[:10]]
+        text = str(value)[:500]
+        for secret in filter(None, secrets):
+            text = text.replace(str(secret), '[REDACTED]')
+        return re.sub(r'(?i)(bearer|apikey)\s+[A-Za-z0-9._-]+', r'\1 [REDACTED]', text)
+    return clean(data)
 
 
 class EvolutionProvider:
@@ -85,6 +114,7 @@ class EvolutionProvider:
         body = json.dumps(payload).encode('utf-8') if payload is not None else None
         last_error = None
         status_code = None
+        safe_payload = {}
         for attempt in range(self.max_attempts):
             request = Request(
                 f'{self.base_url}{path}', data=body, method=method,
@@ -103,19 +133,27 @@ class EvolutionProvider:
             except HTTPError as exc:
                 last_error = exc
                 status_code = exc.code
+                safe_payload = sanitize_provider_error(
+                    exc.read(), (self.api_key, settings.EVOLUTION_WEBHOOK_SECRET),
+                )
                 if exc.code < 500 and exc.code != 429:
                     break
             except (URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
             if attempt + 1 < self.max_attempts:
                 time.sleep(0.2 * (2 ** attempt))
-        self._record_failure()
+        if status_code is None or status_code == 429 or status_code >= 500:
+            self._record_failure()
+        error_data = safe_payload.get('error', safe_payload) if isinstance(safe_payload, dict) else {}
+        provider_code = str(error_data.get('code') or error_data.get('statusCode') or '') if isinstance(error_data, dict) else ''
+        provider_message = str(error_data.get('message') or error_data.get('error') or '')[:300] if isinstance(error_data, dict) else ''
         logger.warning(
-            'evolution.request.failed path=%s method=%s status_code=%s type=%s',
-            path, method, status_code, type(last_error).__name__,
+            'evolution.request.failed path=%s method=%s status_code=%s provider_code=%s provider_message=%s response=%s type=%s',
+            path, method, status_code, provider_code, provider_message, safe_payload, type(last_error).__name__,
         )
         raise EvolutionRequestError(
             'Falha de comunicação com Evolution API.', status_code=status_code, path=path,
+            provider_code=provider_code, provider_message=provider_message, safe_payload=safe_payload,
         ) from last_error
 
     @staticmethod

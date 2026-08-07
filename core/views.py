@@ -26,12 +26,9 @@ from .forms import (
     AIConfigurationForm,
     CompanyInvitationForm,
     AtendimentoSimuladoForm,
-    BloqueioAgendaForm,
     ConfiguracoesContaForm,
-    DisponibilidadeSemanalForm,
     EmpresaClienteForm,
     FluxoAtendimentoForm,
-    ServicoForm,
     RegistrationForm,
     ReminderConfigurationForm,
     KnowledgeBaseArticleForm,
@@ -46,12 +43,9 @@ from .models import (
     AIConfiguration,
     AIPromptProfile,
     Atendimento,
-    BloqueioAgenda,
-    DisponibilidadeSemanal,
     EmpresaCliente,
     FluxoAtendimento,
     Mensagem,
-    Servico,
     TEMPLATES_FLUXO,
     WhatsAppIntegration,
     dados_padrao_fluxo,
@@ -1282,66 +1276,3 @@ def inbox_eventos(request):
         }
         for item in items
     ]})
-
-
-@login_required
-def agenda_configuracao(request):
-    empresa = _empresa_do_usuario(request)
-    forms = {'servico': ServicoForm(prefix='servico', empresa=empresa), 'horario': DisponibilidadeSemanalForm(prefix='horario'), 'bloqueio': BloqueioAgendaForm(prefix='bloqueio')}
-    if request.method == 'POST':
-        kind = request.POST.get('tipo')
-        form_classes = {'servico': ServicoForm, 'horario': DisponibilidadeSemanalForm, 'bloqueio': BloqueioAgendaForm}
-        if kind in form_classes:
-            form_kwargs = {'empresa': empresa} if kind == 'servico' else {}
-            forms[kind] = form_classes[kind](request.POST, prefix=kind, **form_kwargs)
-            if forms[kind].is_valid():
-                item = forms[kind].save(commit=False)
-                item.empresa = empresa
-                try:
-                    with transaction.atomic():
-                        EmpresaCliente.objects.select_for_update().get(pk=empresa.pk)
-                        if kind == 'servico' and Servico.objects.filter(
-                            empresa=empresa,
-                            nome__iexact=item.nome,
-                        ).exists():
-                            forms[kind].add_error('nome', 'Já existe um serviço com esse nome.')
-                        else:
-                            item.save()
-                except IntegrityError:
-                    if kind == 'servico':
-                        forms[kind].add_error('nome', 'Já existe um serviço com esse nome.')
-                    else:
-                        raise
-                if not forms[kind].errors:
-                    record_audit(
-                        request,
-                        'schedule.configuration_added',
-                        empresa=empresa,
-                        target=item,
-                        metadata={'kind': kind},
-                    )
-                    messages.success(request, 'Configuração adicionada.')
-                    return redirect('agenda_configuracao')
-    return render(request, 'core/agenda_configuracao.html', {
-        'empresa': empresa, **forms, 'servicos': empresa.servicos.all(),
-        'horarios': empresa.disponibilidades.all(), 'bloqueios': empresa.bloqueios_agenda.all(),
-    })
-
-
-@login_required
-@require_POST
-def agenda_configuracao_excluir(request, tipo, objeto_id):
-    empresa = _empresa_do_usuario(request)
-    model = {'servico': Servico, 'horario': DisponibilidadeSemanal, 'bloqueio': BloqueioAgenda}.get(tipo)
-    if model:
-        item = get_object_or_404(model, pk=objeto_id, empresa=empresa)
-        record_audit(
-            request,
-            'schedule.configuration_deleted',
-            empresa=empresa,
-            target=item,
-            metadata={'kind': tipo},
-        )
-        item.delete()
-        messages.success(request, 'Configuração removida.')
-    return redirect('agenda_configuracao')

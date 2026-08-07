@@ -1,0 +1,17 @@
+{% extends 'platform/base.html' %}
+{% block title %}Dashboard{% endblock %}{% block heading %}Visão geral da plataforma{% endblock %}
+{% block content %}
+<section class="cards">
+  <article><span>Empresas cadastradas</span><strong>{{ metrics.companies }}</strong></article>
+  <article><span>Empresas ativas</span><strong>{{ metrics.active_companies }}</strong></article>
+  <article><span>Empresas em teste</span><strong>{{ metrics.trial_companies }}</strong></article>
+  <article><span>Empresas bloqueadas</span><strong>{{ metrics.blocked_companies }}</strong></article>
+  <article><span>Conversas hoje</span><strong>{{ metrics.conversations_today }}</strong></article>
+  <article><span>Mensagens hoje</span><strong>{{ metrics.messages_today }}</strong></article>
+  <article><span>Mensagens IA hoje</span><strong>{{ metrics.ai_messages_today }}</strong></article>
+  <article><span>OpenAI hoje</span><strong>R$ {{ metrics.openai_today_brl }}</strong></article>
+  <article><span>OpenAI no mês</span><strong>R$ {{ metrics.openai_month_brl }}</strong></article>
+  <article><span>Estimativa mensal</span><strong>R$ {{ metrics.monthly_cost_estimate_brl }}</strong></article>
+  <article><span>Clientes online</span><strong>{{ metrics.online_clients }}</strong></article>
+</section>
+{% endblock %}

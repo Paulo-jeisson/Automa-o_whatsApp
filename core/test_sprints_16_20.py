@@ -11,7 +11,7 @@ from core.models import (
     OperationalAlert, OperationalMetric, Servico,
 )
 from core.services.ai.tools import AIToolExecutor, AIToolValidationError
-from core.services.observability import raise_alert, record_metric
+from core.services.observability import raise_alert, record_metric, run_operational_checks
 from core.services.queue import enqueue, process_job
 
 
@@ -113,3 +113,24 @@ class QueueAndObservabilityTests(SprintFixtures):
         self.assertEqual(second.occurrences, 2)
         self.assertEqual(OperationalMetric.objects.count(), 1)
         self.assertEqual(OperationalAlert.objects.count(), 1)
+
+    @override_settings(
+        TASK_QUEUE_BACKLOG_WARNING_COUNT=2,
+        TASK_QUEUE_BACKLOG_MAX_AGE_SECONDS=60,
+    )
+    def test_queue_monitor_records_depth_and_alerts_on_threshold(self):
+        for index in range(2):
+            AsyncJob.objects.create(
+                task_name='unknown', queue='whatsapp',
+                idempotency_key=f'monitored-{index}',
+            )
+
+        alerts = run_operational_checks()
+
+        self.assertTrue(any(alert.kind == 'queue_backlog' for alert in alerts))
+        self.assertEqual(
+            OperationalMetric.objects.filter(name='queue.depth').latest('recorded_at').value,
+            2,
+        )
+        self.assertTrue(OperationalMetric.objects.filter(name='queue.processing').exists())
+        self.assertTrue(OperationalMetric.objects.filter(name='queue.oldest_age_seconds').exists())

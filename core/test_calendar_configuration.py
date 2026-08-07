@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from core.models import CalendarConfiguration, DisponibilidadeSemanal, EmpresaCliente
+from core.models import CalendarConfiguration, DisponibilidadeSemanal, EmpresaCliente, Servico
 
 
 class CalendarConfigurationTests(TestCase):
@@ -30,6 +30,9 @@ class CalendarConfigurationTests(TestCase):
         self.assertTrue(config.enabled)
         self.assertEqual(config.public_slug, 'clinica-agenda')
         self.assertEqual(DisponibilidadeSemanal.objects.filter(empresa=self.company).count(), 11)
+        service = Servico.objects.get(empresa=self.company, ativo=True)
+        self.assertEqual(service.nome, 'Clínica Agenda')
+        self.assertEqual(service.duracao_minutos, 30)
         saturday = DisponibilidadeSemanal.objects.get(empresa=self.company, dia_semana=5)
         self.assertEqual((saturday.hora_inicio, saturday.hora_fim), (time(9), time(13)))
         page = self.client.get(reverse('agenda'))
@@ -44,4 +47,7 @@ class CalendarConfigurationTests(TestCase):
         page = self.client.get(reverse('agenda'))
         self.assertNotContains(page, 'clinica-agenda')
         self.assertFalse(DisponibilidadeSemanal.objects.filter(empresa=other).exists())
+        self.assertFalse(Servico.objects.filter(empresa=other, ativo=True).exists())
 
+    def test_legacy_configuration_route_no_longer_exists(self):
+        self.assertEqual(self.client.get('/agenda/configuracao/').status_code, 404)

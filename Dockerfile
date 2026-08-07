@@ -8,6 +8,7 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH="/opt/venv/bin:$PATH" DJANGO_SETTINGS_MODULE=app.settings_production
+RUN apt-get update && apt-get install --no-install-recommends -y ffmpeg && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system iaatende && useradd --system --gid iaatende --home /app iaatende
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv

@@ -116,7 +116,7 @@ TOOL_DEFINITIONS = [
     },
     {
         'type': 'function', 'name': 'pesquisar_dados_negocio',
-        'description': 'Use sempre para consultar fatos importados pela empresa antes de responder sobre cardápio, produtos, preços, estoque, serviços, clientes, veículos, relatórios ou outros dados do negócio. Retorna somente colunas autorizadas para a IA.',
+        'description': 'Use sempre para consultar fatos importados pela empresa antes de responder sobre cardápio, produtos, preços, estoque, serviços, clientes, veículos, relatórios ou outros dados do negócio. Envie a pergunta original completa do cliente. Cada resultado retorna todas e somente as colunas autorizadas pela empresa; preserve a relação entre os campos da mesma linha.',
         'parameters': {
             'type': 'object', 'properties': {'consulta': {'type': 'string'}},
             'required': ['consulta'], 'additionalProperties': False,
@@ -311,7 +311,7 @@ class AIToolExecutor:
     def pesquisar_dados_negocio(self, *, consulta):
         if not str(consulta or '').strip():
             raise AIToolValidationError('Informe uma consulta mais específica.')
-        records, requested_columns = search_business_data(
+        records, _ = search_business_data(
             empresa=self.empresa, query=consulta, limit=50,
         )
         return {'resultados': [
@@ -319,10 +319,9 @@ class AIToolExecutor:
                 'base': item.source.name,
                 'arquivo': item.source.source_filename,
                 'tipo': item.source.data_type,
-                'dados': (
-                    {column: item.visible_data.get(column, '') for column in requested_columns[item.source_id]}
-                    if item.source_id in requested_columns else item.visible_data
-                ),
+                # A consulta seleciona os registros, mas a whitelist configurada
+                # pelo usuário determina integralmente o que pode chegar à IA.
+                'dados': item.visible_data,
             }
             for item in records
         ], 'orientacao': (

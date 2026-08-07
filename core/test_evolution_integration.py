@@ -82,7 +82,7 @@ class EvolutionWebhookTests(TestCase):
         self.assertEqual(Mensagem.objects.filter(external_message_id='evo-in-1').count(), 1)
         self.assertEqual(AsyncJob.objects.filter(task_name='whatsapp.automatic_reply').count(), 1)
 
-    def test_media_is_downloaded_and_persisted_without_exposing_failure(self):
+    def test_audio_is_persisted_and_download_is_deferred_to_worker(self):
         provider = Mock()
         provider.download_media.return_value = b'audio-bytes'
         payload = message_payload(
@@ -90,10 +90,14 @@ class EvolutionWebhookTests(TestCase):
             message={'audioMessage': {'mimetype': 'audio/ogg'}},
         )
         EvolutionWebhookService(provider=provider).process(self.session.pk, payload)
-        provider.download_media.assert_called_once()
+        provider.download_media.assert_not_called()
         message = Mensagem.objects.get(external_message_id='evo-audio-1')
         self.assertEqual(message.tipo, 'audio')
         self.assertEqual(message.empresa, self.company)
+        self.assertEqual(message.transcription_status, Mensagem.TranscriptionStatus.PENDING)
+        self.assertTrue(AsyncJob.objects.filter(
+            task_name='whatsapp.audio_transcription', payload__message_id=message.pk,
+        ).exists())
 
     def test_qr_event_updates_only_the_instance_session(self):
         payload = {
@@ -167,8 +171,12 @@ class EvolutionWebhookTests(TestCase):
                 )
                 EvolutionWebhookService(provider=provider).process(self.session.pk, payload)
                 inbound = Mensagem.objects.get(external_message_id=f'real-{index}')
+                expected_task = (
+                    'whatsapp.audio_transcription'
+                    if kind == 'audio' else 'whatsapp.automatic_reply'
+                )
                 self.assertTrue(AsyncJob.objects.filter(
-                    task_name='whatsapp.automatic_reply',
+                    task_name=expected_task,
                     payload__message_id=inbound.pk,
                     payload__company_id=self.company.pk,
                 ).exists())

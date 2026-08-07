@@ -6,7 +6,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth import get_user_model
 
 from .models import (
-    Agendamento, AIConfiguration, Atendimento, BloqueioAgenda, Contato, DisponibilidadeSemanal,
+    Agendamento, AIConfiguration, Atendimento, Contato,
     EmpresaCliente, FluxoAtendimento, Servico,
     CompanyInvitation, CompanyMembership, ReminderConfiguration, KnowledgeBaseArticle,
     DataRetentionPolicy, DataSubjectRequest, BusinessDataSource,
@@ -127,7 +127,11 @@ class BusinessDataImportForm(forms.Form):
     )
     ai_visible_columns = forms.CharField(
         label='Colunas que a IA pode informar', max_length=1000, required=False,
-        help_text='Para planilhas, separe por vírgulas. Em documentos, deixe vazio para disponibilizar o texto extraído.',
+        help_text=(
+            'Para planilhas, separe por vírgulas somente as colunas que podem ser '
+            'repassadas ao cliente. Deixe vazio para autorizar todas. Em documentos, '
+            'deixe vazio para disponibilizar o texto extraído.'
+        ),
     )
     replace_existing = forms.BooleanField(
         label='Substituir uma base existente com o mesmo nome', required=False, initial=True,
@@ -408,37 +412,6 @@ class AccountPasswordChangeForm(PasswordChangeForm):
     )
 
 
-class ServicoForm(forms.ModelForm):
-    class Meta:
-        model = Servico
-        fields = ['nome', 'descricao', 'duracao_minutos', 'ativo']
-        widgets = {'descricao': forms.Textarea(attrs={'rows': 3})}
-
-    def __init__(self, *args, empresa=None, **kwargs):
-        self.empresa = empresa
-        super().__init__(*args, **kwargs)
-
-    def clean_nome(self):
-        nome = self.cleaned_data['nome'].strip()
-        if self.empresa is not None:
-            duplicates = Servico.objects.filter(
-                empresa=self.empresa,
-                nome__iexact=nome,
-            )
-            if self.instance.pk:
-                duplicates = duplicates.exclude(pk=self.instance.pk)
-            if duplicates.exists():
-                raise forms.ValidationError('Já existe um serviço com esse nome.')
-        return nome
-
-
-class DisponibilidadeSemanalForm(forms.ModelForm):
-    class Meta:
-        model = DisponibilidadeSemanal
-        fields = ['dia_semana', 'hora_inicio', 'hora_fim', 'intervalo_minutos', 'ativo']
-        widgets = {'hora_inicio': forms.TimeInput(attrs={'type': 'time'}), 'hora_fim': forms.TimeInput(attrs={'type': 'time'})}
-
-
 class CalendarConfigurationForm(forms.ModelForm):
     WEEKDAY_CHOICES = [('0', 'SEG'), ('1', 'TER'), ('2', 'QUA'), ('3', 'QUI'), ('4', 'SEX'), ('5', 'SÁB'), ('6', 'DOM')]
     weekdays = forms.MultipleChoiceField(
@@ -460,17 +433,6 @@ class CalendarConfigurationForm(forms.ModelForm):
             'saturday_start': forms.TimeInput(attrs={'type': 'time'}),
             'saturday_end': forms.TimeInput(attrs={'type': 'time'}),
             'slot_duration_minutes': forms.Select(choices=[(15, '15 min'), (20, '20 min'), (30, '30 min'), (45, '45 min'), (60, '60 min'), (90, '90 min'), (120, '2 horas')]),
-        }
-
-
-class BloqueioAgendaForm(forms.ModelForm):
-    class Meta:
-        model = BloqueioAgenda
-        fields = ['data', 'hora_inicio', 'hora_fim', 'motivo']
-        widgets = {
-            'data': forms.DateInput(attrs={'type': 'date'}),
-            'hora_inicio': forms.TimeInput(attrs={'type': 'time'}),
-            'hora_fim': forms.TimeInput(attrs={'type': 'time'}),
         }
 
 

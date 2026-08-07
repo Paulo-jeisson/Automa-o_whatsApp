@@ -11,4 +11,6 @@ class CompanyAIGateway:
 
     def reply(self, *, inbound_message):
         EntitlementService.require_company_access(inbound_message.empresa)
-        return self.service.reply(inbound_message=inbound_message)
+        return self.service.reply(
+            inbound_message=inbound_message, user_input=inbound_message.ai_text,
+        )

@@ -1,13 +1,55 @@
 {% extends "base.html" %}{% block title %}Histórico de Conversas | IAATENDE 2.0{% endblock %}
-{% block body %}<main class="ai-reference-page"><div class="ai-reference-container"><section class="reference-tab-area conversation-tab-area">
+{% block body %}<main class="ai-reference-page" id="conversation-page" data-scroll-containers=".conversation-contacts,.conversation-thread-scroll"><div class="ai-reference-container"><section class="reference-tab-area conversation-tab-area">
   {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}{% endif %}
   <div class="reference-card conversation-reference-card">
     <h2><span aria-hidden="true">□</span> HISTÓRICO DE CONVERSAS</h2>
     <p class="reference-tip">Visualize todas as conversas que a IA teve com seus clientes.</p>
-    <form method="get" class="conversation-search"><label><span aria-hidden="true">⌕</span><input name="q" value="{{ query }}" placeholder="Buscar por telefone ou nome..."></label><button class="btn btn-primary" type="submit">⟳ ATUALIZAR</button></form>
+    <form method="get" class="conversation-search" data-conversation-navigation><label><span aria-hidden="true">⌕</span><input name="q" value="{{ query }}" placeholder="Buscar por telefone ou nome..."></label><button class="btn btn-primary" type="submit">⟳ ATUALIZAR</button></form>
     <div class="conversation-history-layout">
-      <aside class="conversation-contacts"><h3>CONTATOS</h3><div>{% for item in conversations %}<a class="conversation-contact {% if selected.id == item.id %}active{% endif %}" href="?conversation={{ item.id }}&q={{ query|urlencode }}"><strong>♙ {{ item.telefone_cliente|default:item.nome_cliente }}</strong><p>{% with msg=item.mensagens.first %}{{ msg.texto|default:item.necessidade|truncatechars:42 }}{% endwith %}</p><small>{{ item.last_message_at|default:item.criado_em|date:"d/m/Y, H:i:s" }} <span>□ {{ item.mensagens.count }}</span></small></a>{% empty %}<p class="conversation-empty">NENHUM CONTATO</p>{% endfor %}</div></aside>
+      <aside class="conversation-contacts"><h3>CONTATOS</h3><div>{% for item in conversations %}<a class="conversation-contact {% if selected.id == item.id %}active{% endif %}" data-conversation-navigation href="?conversation={{ item.id }}&q={{ query|urlencode }}"><strong>♙ {{ item.telefone_cliente|default:item.nome_cliente }}</strong><p>{% with msg=item.mensagens.first %}{{ msg.texto|default:item.necessidade|truncatechars:42 }}{% endwith %}</p><small>{{ item.last_message_at|default:item.criado_em|date:"d/m/Y, H:i:s" }} <span>□ {{ item.mensagens.count }}</span></small></a>{% empty %}<p class="conversation-empty">NENHUM CONTATO</p>{% endfor %}</div></aside>
       <section class="conversation-thread-panel">{% if selected %}<header><div><h3>Conversa com <b>{{ selected.telefone_cliente|default:selected.nome_cliente }}</b></h3><small>{{ selected.mensagens.count }} MENSAGENS</small></div><div class="conversation-header-actions"><a class="btn btn-primary" href="{% url 'conversation_export' selected.id %}">EXPORTAR</a><form method="post" action="{% url 'conversation_delete' selected.id %}" onsubmit="return confirm('Excluir permanentemente esta conversa?');">{% csrf_token %}<button class="btn btn-danger" type="submit">DELETAR</button></form></div></header><div class="conversation-thread-scroll">{% for message in selected.mensagens.all reversed %}<article class="history-message {% if message.direcao == 'entrada' %}client-message{% else %}ai-message{% endif %}"><div><strong>{% if message.direcao == 'entrada' %}♙ Cliente{% elif message.sent_by %}▣ {{ message.sent_by }}{% else %}▤ IA{% endif %}</strong><time>{{ message.criado_em|date:"d/m/Y, H:i:s" }}</time></div><p>{{ message.texto }}</p>{% if message.tipo != 'text' %}<span class="media-chip">{{ message.tipo }}</span>{% endif %}</article>{% empty %}<p class="conversation-empty">SEM MENSAGENS</p>{% endfor %}</div>{% else %}<p class="conversation-empty">SELECIONE UMA CONVERSA</p>{% endif %}</section>
     </div>
   </div>
 </section></div></main>{% endblock %}
+
+{% block extra_js %}<script>(()=>{
+  if(window.__iaAtendeConversationNavigation)return;
+  window.__iaAtendeConversationNavigation=true;
+  const currentRoot=()=>document.querySelector('#conversation-page');
+  const navigation=window.IAAtendeNavigation;
+  const snapshot=()=>navigation.capture({containers:['.conversation-contacts','.conversation-thread-scroll']});
+  const load=async(url,state)=>{
+    try{
+      const response=await fetch(url,{headers:{'X-Requested-With':'IAATENDE-Conversations'}});
+      if(!response.ok)throw new Error('navigation failed');
+      const page=new DOMParser().parseFromString(await response.text(),'text/html');
+      const nextRoot=page.querySelector('#conversation-page');
+      const root=currentRoot();
+      if(!root||!nextRoot)throw new Error('invalid page');
+      root.replaceWith(nextRoot);
+      document.title=page.title;
+      history.pushState({conversation:true},'',response.url);
+      navigation.restore(state);
+    }catch(_error){
+      navigation.save(state);
+      window.location.assign(url);
+    }
+  };
+  document.addEventListener('click',event=>{
+    const link=event.target.closest('#conversation-page a[data-conversation-navigation],#conversation-page .conversation-pagination a');
+    if(!link||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    load(link.href,snapshot());
+  });
+  document.addEventListener('submit',event=>{
+    const form=event.target.closest('#conversation-page form');
+    if(!form||event.defaultPrevented)return;
+    if((form.method||'get').toLowerCase()!=='get')return;
+    if(!form.matches('[data-conversation-navigation]'))return;
+    event.preventDefault();
+    const state=snapshot();
+    const url=new URL(form.action||window.location.href,window.location.href);
+    url.search=new URLSearchParams(new FormData(form)).toString();
+    load(url.href,state);
+  });
+})();</script>{% endblock %}

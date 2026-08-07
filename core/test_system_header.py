@@ -34,6 +34,26 @@ class SystemHeaderTests(TestCase):
         self.assertIn('id="system-page-content"', content)
         self.assertIn("IAATENDE-Menu", content)
 
+    def test_authenticated_layout_loads_scoped_navigation_state_utility(self):
+        content = self.client.get(reverse('conversations_crm')).content.decode()
+        self.assertIn('data-authenticated="true"', content)
+        self.assertIn(f'data-scroll-user="{self.user.pk}"', content)
+        self.assertIn(f'data-scroll-tenant="{self.company.pk}"', content)
+        self.assertIn('/static/core/js/navigation_state.js?v=2', content)
+
+    def test_scroll_bootstrap_runs_in_head_and_only_hides_for_valid_pending_state(self):
+        content = self.client.get(reverse('conversations_crm')).content.decode()
+        head = content[:content.index('</head>')]
+        self.assertIn("sessionStorage.getItem(key)", head)
+        self.assertIn("sessionStorage.removeItem(key)", head)
+        self.assertIn("state.path!==location.pathname", head)
+        self.assertIn("age>2*60*1000", head)
+        self.assertIn("classList.add('ia-scroll-restoring')", head)
+        self.assertIn("DOMContentLoaded", head)
+        self.assertIn("html.ia-scroll-restoring body{visibility:hidden}", head)
+        self.assertNotIn('setTimeout(', head)
+        self.assertLess(content.index('sessionStorage.getItem(key)'), content.index('<body'))
+
     def test_system_is_active_only_after_qr_connection_is_confirmed(self):
         session = WhatsAppSession.objects.create(
             empresa=self.company, instance_name='header-validation', state='CONNECTED',

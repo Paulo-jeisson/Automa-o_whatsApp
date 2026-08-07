@@ -425,6 +425,14 @@ class Atendimento(models.Model):
 
 
 class Mensagem(models.Model):
+    class TranscriptionStatus(models.TextChoices):
+        NOT_REQUIRED = 'NOT_REQUIRED', 'Não aplicável'
+        PENDING = 'PENDING', 'Pendente'
+        PROCESSING = 'PROCESSING', 'Processando'
+        COMPLETED = 'COMPLETED', 'Concluída'
+        FAILED = 'FAILED', 'Falhou'
+        DISABLED = 'DISABLED', 'Desativada'
+
     DIRECAO_ENTRADA = 'entrada'
     DIRECAO_SAIDA = 'saida'
     DIRECAO_CHOICES = [
@@ -473,6 +481,13 @@ class Mensagem(models.Model):
     )
     tipo = models.CharField('tipo', max_length=32, default='unknown')
     texto = models.TextField('texto', blank=True)
+    transcription_status = models.CharField(
+        'status da transcrição', max_length=16,
+        choices=TranscriptionStatus.choices, default=TranscriptionStatus.NOT_REQUIRED,
+    )
+    transcription_text = models.TextField('texto transcrito', blank=True)
+    transcription_model = models.CharField('modelo de transcrição', max_length=80, blank=True)
+    transcription_error = models.CharField('erro de transcrição', max_length=80, blank=True)
     status = models.CharField(
         'status',
         max_length=16,
@@ -501,6 +516,12 @@ class Mensagem(models.Model):
 
     def __str__(self):
         return f'{self.get_direcao_display()} - {self.external_message_id}'
+
+    @property
+    def ai_text(self):
+        if self.tipo == 'audio' and self.transcription_status == self.TranscriptionStatus.COMPLETED:
+            return self.transcription_text.strip()
+        return self.texto.strip()
 
 
 class Servico(models.Model):
@@ -1270,7 +1291,7 @@ class AIPromptProfile(models.Model):
     draft_prompt = models.TextField(blank=True)
     autosaved_at = models.DateTimeField(null=True, blank=True)
     response_delay_seconds = models.PositiveSmallIntegerField(
-        default=3,
+        default=2,
         validators=[MinValueValidator(0), MaxValueValidator(60)],
     )
     updated_at = models.DateTimeField(auto_now=True)

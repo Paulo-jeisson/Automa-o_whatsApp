@@ -48,12 +48,28 @@ def run_operational_checks(now=None):
     except Exception:
         alerts.append(raise_alert('database_unavailable', 'Banco de dados indisponível.', severity='CRITICAL', fingerprint='database'))
 
-    queued = AsyncJob.objects.filter(
+    queued_jobs = AsyncJob.objects.filter(
         status__in=[AsyncJob.Status.PENDING, AsyncJob.Status.RETRY],
-        available_at__lt=now - timedelta(minutes=5),
+        queue='whatsapp',
+    )
+    queued = queued_jobs.count()
+    processing = AsyncJob.objects.filter(
+        queue='whatsapp', status=AsyncJob.Status.PROCESSING,
     ).count()
-    if queued:
-        alerts.append(raise_alert('queue_backlog', f'{queued} job(s) atrasado(s) na fila.', fingerprint='queue-backlog'))
+    oldest = queued_jobs.order_by('created_at').values_list('created_at', flat=True).first()
+    oldest_age = max(0, int((now - oldest).total_seconds())) if oldest else 0
+    record_metric('queue.depth', value=queued, labels={'queue': 'whatsapp'})
+    record_metric('queue.processing', value=processing, labels={'queue': 'whatsapp'})
+    record_metric('queue.oldest_age_seconds', value=oldest_age, labels={'queue': 'whatsapp'})
+    if (
+        queued >= settings.TASK_QUEUE_BACKLOG_WARNING_COUNT
+        or oldest_age >= settings.TASK_QUEUE_BACKLOG_MAX_AGE_SECONDS
+    ):
+        alerts.append(raise_alert(
+            'queue_backlog',
+            f'Fila whatsapp com {queued} job(s); mais antigo aguarda {oldest_age}s.',
+            fingerprint='queue-backlog',
+        ))
 
     stuck = AsyncJob.objects.filter(
         status=AsyncJob.Status.PROCESSING, lease_expires_at__lt=now,

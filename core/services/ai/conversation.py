@@ -49,7 +49,7 @@ class AIConversationService:
             return None
         return configuration
 
-    def reply(self, *, inbound_message):
+    def reply(self, *, inbound_message, user_input=None):
         started = time.monotonic()
         atendimento = inbound_message.atendimento
         configuration = self.is_enabled(atendimento)
@@ -72,7 +72,8 @@ class AIConversationService:
             draft.last_error = 'interrupted_while_generating'
             draft.save(update_fields=['status', 'last_error', 'updated_at'])
             raise AIAmbiguousResultError('Execução anterior interrompida durante a chamada de IA.')
-        if reject_adversarial_input(inbound_message.texto):
+        user_input = inbound_message.ai_text if user_input is None else str(user_input).strip()
+        if reject_adversarial_input(user_input):
             logger.warning(
                 'ai.input.rejected company_id=%s attendance_id=%s',
                 atendimento.empresa_id, atendimento.pk,
@@ -91,7 +92,7 @@ class AIConversationService:
             response = self.agent.respond(
                 configuration=configuration,
                 atendimento=atendimento,
-                user_input=inbound_message.texto,
+                user_input=user_input,
             )
             self._record_usage(
                 atendimento, response=response,

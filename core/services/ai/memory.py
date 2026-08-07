@@ -1,6 +1,7 @@
 """Memória conversacional limitada e estruturada."""
 
 from dataclasses import dataclass
+import unicodedata
 
 from django.conf import settings
 from django.db import transaction
@@ -49,18 +50,39 @@ class ConversationMemoryService:
         ).order_by('-criado_em')[:self.message_limit])
         messages.reverse()
         return ConversationMemory(
-            customer_name=atendimento.contato.nome or atendimento.nome_cliente,
+            customer_name=self._safe_customer_name(
+                atendimento.contato.nome or atendimento.nome_cliente,
+            ),
             current_step=atendimento.current_step,
             state=dict(atendimento.conversation_state or {}),
             summary=atendimento.conversation_summary,
             recent_messages=tuple(
                 ConversationMessage(
                     role='user' if item.direcao == Mensagem.DIRECAO_ENTRADA else 'assistant',
-                    text=item.texto[:1000],
+                    text=item.ai_text[:1000],
                 )
-                for item in messages if item.texto
+                for item in messages if item.ai_text
             ),
         )
+
+    @staticmethod
+    def _safe_customer_name(value):
+        """Expose only a plausible contact name, never a phone or emoji-only label."""
+        raw = str(value or '').strip()
+        if not raw or any(character.isdigit() for character in raw):
+            return ''
+        cleaned = ''.join(
+            character
+            for character in raw
+            if unicodedata.category(character)[0] in {'L', 'M'}
+            or character in " '-"
+        )
+        cleaned = ' '.join(cleaned.split()).strip(" '-")
+        if len(cleaned) < 2 or cleaned.casefold() in {
+            'cliente', 'contato', 'desconhecido', 'não informado', 'nao informado',
+        }:
+            return ''
+        return cleaned[:120]
 
     def update_state(self, *, atendimento, values):
         self._validate_tenant(atendimento)
@@ -91,8 +113,8 @@ class ConversationMemoryService:
         items = queryset[atendimento.summarized_message_count:keep_from]
         additions = [
             ('Cliente: ' if item.direcao == Mensagem.DIRECAO_ENTRADA else 'Assistente: ')
-            + item.texto[:300]
-            for item in items if item.texto
+            + item.ai_text[:300]
+            for item in items if item.ai_text
         ]
         summary = '\n'.join(
             part for part in [atendimento.conversation_summary, *additions] if part

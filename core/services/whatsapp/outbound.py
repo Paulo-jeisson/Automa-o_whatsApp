@@ -245,6 +245,7 @@ def send_automatic_reply(inbound_message):
         return None
     atendimento = normalize_legacy_technical_handoff(inbound_message)
     inbound_message.atendimento = atendimento
+    _refresh_evolution_state_if_needed(inbound_message.empresa)
     reason = automatic_reply_ineligibility(inbound_message)
     if reason:
         logger.info(
@@ -263,7 +264,15 @@ def send_automatic_reply(inbound_message):
         )
         return None
 
-    supported_text = inbound_message.tipo == 'text' and bool(inbound_message.texto)
+    initial_step = atendimento.current_step
+    initial_handoff_type = (atendimento.conversation_state or {}).get('handoff_type')
+    supported_text = (
+        inbound_message.tipo == 'text'
+        or (
+            inbound_message.tipo == 'audio'
+            and inbound_message.transcription_status == Mensagem.TranscriptionStatus.COMPLETED
+        )
+    ) and bool(inbound_message.ai_text)
     try:
         response_text = CompanyAIGateway().reply(inbound_message=inbound_message) if supported_text else None
     except AIAmbiguousResultError:
@@ -287,7 +296,7 @@ def send_automatic_reply(inbound_message):
     if not supported_text:
         response_text = {
             'image': 'Recebi sua imagem. Vou encaminhar para análise da equipe.',
-            'audio': 'Recebi seu áudio. No momento preciso encaminhá-lo para análise da equipe.',
+            'audio': 'Não consegui entender esse áudio. Você pode enviar novamente ou escrever sua mensagem?',
             'document': 'Recebi seu documento. Vou encaminhar para análise segura da equipe.',
             'video': 'Recebi seu vídeo. Vou encaminhar para análise da equipe.',
             'location': 'Recebi sua localização. Vou encaminhar para a equipe.',
@@ -331,10 +340,19 @@ def send_automatic_reply(inbound_message):
     try:
         with transaction.atomic():
             locked = type(atendimento).objects.select_for_update().get(pk=atendimento.pk)
+            locked_handoff_type = (locked.conversation_state or {}).get('handoff_type')
+            ai_handoff_created_now = (
+                ai_generated
+                and initial_step not in {locked.Step.WAITING_HUMAN, locked.Step.HUMAN}
+                and locked.current_step == locked.Step.WAITING_HUMAN
+                and locked_handoff_type
+                and locked_handoff_type != initial_handoff_type
+                and not locked.assigned_to_id
+            )
             if (
                 locked.current_step in {locked.Step.WAITING_HUMAN, locked.Step.HUMAN, locked.Step.FINISHED}
                 or locked.assigned_to_id
-            ):
+            ) and not ai_handoff_created_now:
                 logger.info(
                     'whatsapp.auto_reply.skipped company_id=%s attendance_id=%s reason=human_mode',
                     inbound_message.empresa_id, atendimento.pk,
@@ -399,6 +417,20 @@ def send_automatic_reply(inbound_message):
         outbound_message.external_message_id,
     )
     return outbound_message
+
+
+def _refresh_evolution_state_if_needed(empresa):
+    """Use the provider as source of truth before rejecting a live message."""
+    session = WhatsAppSession.objects.filter(empresa_id=empresa.pk).first()
+    if session is None or session.state == 'CONNECTED':
+        return session
+    from core.application.whatsapp_service import WhatsAppSessionService
+    refreshed = WhatsAppSessionService().refresh(empresa)
+    logger.info(
+        'whatsapp.session.worker_sync company_id=%s instance=%s previous_state=%s state=%s',
+        empresa.pk, refreshed.instance_name, session.state, refreshed.state,
+    )
+    return refreshed
 
 
 def _build_initial_response(fluxo):

@@ -60,7 +60,7 @@ class PromptCompilerFlowTests(TestCase):
         self.assertContains(page, '# [IDENTIDADE]')
         self.assertIn('Empresa A', profile.generated_prompt)
         self.assertNotIn('{{AGENT_NAME}}', profile.generated_prompt)
-        self.assertEqual(profile.response_delay_seconds, 3)
+        self.assertEqual(profile.response_delay_seconds, 2)
         self.assertEqual(profile.versions.count(), 1)
 
         response = self.client.post(reverse('prompt_editor'), {

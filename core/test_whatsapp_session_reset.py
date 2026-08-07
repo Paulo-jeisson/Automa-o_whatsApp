@@ -1,9 +1,12 @@
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from core.application.whatsapp_service import WhatsAppSessionService
+from core.application.whatsapp_service import (
+    WhatsAppOperationInProgress, WhatsAppSessionService, _company_operation_lock,
+)
+from django.db import OperationalError
 from core.domain.exceptions import ProviderUnavailable
 from core.domain.whatsapp import SessionSnapshot, SessionState
 from core.infrastructure.evolution import EvolutionRequestError
@@ -23,6 +26,7 @@ class WhatsAppSessionResetTests(TestCase):
             ping_ms=7,
         )
         self.service = WhatsAppSessionService(provider=self.provider)
+        self.service._wait_until_deleted = Mock()
         self.session = self.service.ensure(self.company)
         self.session.state = SessionState.OFFLINE
         self.session.qr_code = 'data:image/png;base64,EXPIRADO'
@@ -111,3 +115,88 @@ class WhatsAppSessionResetTests(TestCase):
         self.assertEqual(result.state, SessionState.ERROR)
         self.assertEqual(result.qr_code, '')
         self.assertNotIn('EXPIRADO', result.qr_code)
+
+    def test_create_403_is_never_treated_as_existing(self):
+        self.provider.create.side_effect = EvolutionRequestError('forbidden', status_code=403)
+        result = self.service.clear(self.company)
+        self.assertEqual(result.state, SessionState.ERROR)
+        self.assertEqual(result.qr_code, '')
+        self.provider.status.assert_called_once_with(self.session.instance_name)
+        self.provider.configure_webhook.assert_not_called()
+
+    def test_create_conflict_continues_only_after_remote_existence_is_confirmed(self):
+        self.provider.create.side_effect = EvolutionRequestError(
+            'conflict', status_code=409, provider_message='instance already exists',
+        )
+        self.provider.status.side_effect = [
+            SessionSnapshot(state=SessionState.OFFLINE),
+            SessionSnapshot(state=SessionState.WAITING_QR, qr_code='data:image/png;base64,CONFIRMADO'),
+        ]
+        result = self.service.clear(self.company)
+        self.assertEqual(result.state, SessionState.WAITING_QR)
+        self.assertIn('CONFIRMADO', result.qr_code)
+        self.provider.configure_webhook.assert_called_once_with(self.session.instance_name)
+
+    def test_reconnect_recreates_only_when_remote_absence_is_proven(self):
+        self.provider.status.side_effect = EvolutionRequestError('missing', status_code=404)
+        result = self.service.reconnect(self.company)
+        self.assertEqual(result.state, SessionState.WAITING_QR)
+        self.provider.create.assert_called_once_with(self.session.instance_name)
+        self.provider.configure_webhook.assert_called_once_with(self.session.instance_name)
+
+    def test_reconnect_403_does_not_recreate(self):
+        self.provider.status.side_effect = EvolutionRequestError('forbidden', status_code=403)
+        result = self.service.reconnect(self.company)
+        self.assertEqual(result.state, SessionState.ERROR)
+        self.provider.create.assert_not_called()
+
+    def test_delete_is_polled_until_remote_404_before_create(self):
+        service = WhatsAppSessionService(provider=self.provider)
+        self.provider.status.side_effect = [
+            SessionSnapshot(state=SessionState.OFFLINE),
+            SessionSnapshot(state=SessionState.OFFLINE),
+            EvolutionRequestError('missing', status_code=404),
+        ]
+        with patch('core.application.whatsapp_service.time.sleep'):
+            service.clear(self.company)
+        calls = self.provider.method_calls
+        create_index = calls.index(call.create(self.session.instance_name))
+        self.assertEqual(calls[:create_index].count(call.status(self.session.instance_name)), 3)
+
+    def test_delete_poll_is_bounded(self):
+        service = WhatsAppSessionService(provider=self.provider)
+        service.deletion_poll_delays = (0, 0)
+        self.provider.status.return_value = SessionSnapshot(state=SessionState.OFFLINE)
+        result = service.clear(self.company)
+        self.assertEqual(result.state, SessionState.ERROR)
+        self.provider.create.assert_not_called()
+
+    def test_create_403_name_in_use_reconciles_connected_instance(self):
+        self.provider.create.side_effect = EvolutionRequestError(
+            'forbidden', status_code=403, provider_message='This name is already in use',
+        )
+        self.provider.status.return_value = SessionSnapshot(state=SessionState.CONNECTED)
+        result = self.service.clear(self.company)
+        self.assertEqual(result.state, SessionState.CONNECTED)
+        self.assertEqual(result.qr_code, '')
+
+    def test_sqlite_database_lock_is_retried_but_other_errors_are_not_hidden(self):
+        session = self.service.ensure(self.company)
+        session.save = Mock(side_effect=[OperationalError('database is locked'), None])
+        with patch('core.application.whatsapp_service.time.sleep') as sleep_mock:
+            self.service._persist(session)
+        self.assertEqual(session.save.call_count, 2)
+        sleep_mock.assert_called_once()
+
+        session.save = Mock(side_effect=OperationalError('disk I/O error'))
+        with self.assertRaises(OperationalError):
+            self.service._persist(session)
+        self.assertEqual(session.save.call_count, 1)
+
+    def test_operation_lock_is_scoped_per_company(self):
+        with _company_operation_lock(100):
+            with self.assertRaises(WhatsAppOperationInProgress):
+                with _company_operation_lock(100):
+                    pass
+            with _company_operation_lock(200):
+                pass

@@ -1,8 +1,6 @@
 from datetime import time, timedelta
-from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -184,61 +182,3 @@ class AgendaPanelTests(Phase5Base):
         self.atendimento.refresh_from_db()
         self.assertEqual(self.atendimento.current_step, Atendimento.Step.HUMAN)
         self.assertFalse(self.atendimento.automation_enabled)
-
-
-class ServiceConfigurationTests(TestCase):
-    def setUp(self):
-        self.user = get_user_model().objects.create_user('servicos-a', password='senha-forte')
-        self.empresa = EmpresaCliente.objects.create(usuario=self.user, nome='Empresa Serviços A')
-        self.client.force_login(self.user)
-        self.url = reverse('agenda_configuracao')
-
-    @staticmethod
-    def payload(nome='Consulta'):
-        return {
-            'tipo': 'servico',
-            'servico-nome': nome,
-            'servico-descricao': 'Descrição',
-            'servico-duracao_minutos': '60',
-            'servico-ativo': 'on',
-        }
-
-    def test_first_service_is_created_successfully(self):
-        response = self.client.post(self.url, self.payload())
-        self.assertRedirects(response, self.url)
-        self.assertTrue(Servico.objects.filter(empresa=self.empresa, nome='Consulta').exists())
-
-    def test_same_name_in_same_company_is_rejected_without_server_error(self):
-        Servico.objects.create(empresa=self.empresa, nome='Consulta')
-        response = self.client.post(self.url, self.payload())
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Já existe um serviço com esse nome.')
-        self.assertEqual(Servico.objects.filter(empresa=self.empresa).count(), 1)
-
-    def test_extra_spaces_are_normalized_and_rejected(self):
-        Servico.objects.create(empresa=self.empresa, nome='Consulta')
-        response = self.client.post(self.url, self.payload('  Consulta  '))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Já existe um serviço com esse nome.')
-        self.assertEqual(Servico.objects.filter(empresa=self.empresa).count(), 1)
-
-    def test_case_difference_is_rejected(self):
-        Servico.objects.create(empresa=self.empresa, nome='Consulta')
-        response = self.client.post(self.url, self.payload('CONSULTA'))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Já existe um serviço com esse nome.')
-        self.assertEqual(Servico.objects.filter(empresa=self.empresa).count(), 1)
-
-    def test_same_name_is_allowed_for_different_companies(self):
-        other_user = get_user_model().objects.create_user('servicos-b', password='senha-forte')
-        other_company = EmpresaCliente.objects.create(usuario=other_user, nome='Empresa Serviços B')
-        Servico.objects.create(empresa=other_company, nome='Consulta', descricao='Descrição')
-        response = self.client.post(self.url, self.payload())
-        self.assertRedirects(response, self.url)
-        self.assertEqual(Servico.objects.filter(nome='Consulta').count(), 2)
-
-    def test_concurrent_integrity_error_becomes_form_error(self):
-        with patch('core.models.Servico.save', side_effect=IntegrityError('concorrência')):
-            response = self.client.post(self.url, self.payload())
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Já existe um serviço com esse nome.')

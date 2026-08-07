@@ -150,7 +150,7 @@ class PromptCompilerService:
 
     @classmethod
     @transaction.atomic
-    def publish_editor_prompt(cls, *, empresa, user, content, response_delay_seconds=3):
+    def publish_editor_prompt(cls, *, empresa, user, content, response_delay_seconds=2):
         value = str(content or '').strip()
         if not value:
             raise ValidationError({'content': 'O prompt não pode ficar vazio.'})
@@ -175,7 +175,7 @@ class PromptCompilerService:
 
     @classmethod
     @transaction.atomic
-    def save_draft(cls, *, empresa, content, response_delay_seconds=3):
+    def save_draft(cls, *, empresa, content, response_delay_seconds=2):
         value = str(content or '')
         try:
             delay = int(response_delay_seconds)

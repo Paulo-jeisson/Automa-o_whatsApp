@@ -30,10 +30,13 @@ services:
   worker:
     build: .
     restart: unless-stopped
+    deploy:
+      replicas: 4
     env_file: .env
     environment:
       POSTGRES_HOST: db
-    command: ["python", "manage.py", "run_worker", "--queue", "whatsapp"]
+    entrypoint: ["python", "manage.py", "run_worker"]
+    command: ["--queue", "whatsapp"]
     stop_grace_period: 45s
     healthcheck:
       test: ["CMD", "python", "-c", "import pathlib,sys; sys.exit(0 if b'run_worker' in pathlib.Path('/proc/1/cmdline').read_bytes() else 1)"]

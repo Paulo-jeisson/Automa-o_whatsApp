@@ -93,7 +93,7 @@ class EvolutionWebhookService:
             self._qr_update(session, data)
             self._reply_skip(session, message_id, 'internal_qr_event', event_name)
         elif 'connection' in event_name:
-            self._connection_update(session, data)
+            self._connection_update(session, data, payload.get('date_time') or payload.get('datetime'))
             self._reply_skip(session, message_id, 'internal_connection_event', event_name)
         elif 'messages.update' in event_name or 'send.message' in event_name:
             self._status_update(session, data)
@@ -149,10 +149,18 @@ class EvolutionWebhookService:
             session.save(update_fields=['qr_code', 'state', 'last_sync_at', 'updated_at'])
 
     @staticmethod
-    def _connection_update(session, data):
+    def _connection_update(session, data, event_time=None):
         state = str(data.get('state') or data.get('status') or '').lower()
         mapped = {'open': 'CONNECTED', 'connected': 'CONNECTED', 'connecting': 'CONNECTING', 'close': 'OFFLINE', 'disconnected': 'OFFLINE'}.get(state)
         if mapped:
+            if event_time and session.last_sync_at:
+                try:
+                    occurred_at = datetime.fromisoformat(str(event_time).replace('Z', '+00:00'))
+                    if occurred_at < session.last_sync_at:
+                        logger.info('whatsapp.session.stale_connection_event_ignored company_id=%s instance=%s remote_state=%s', session.empresa_id, session.instance_name, mapped)
+                        return
+                except ValueError:
+                    pass
             session.state = mapped
             if mapped == 'CONNECTED' and not session.connected_at:
                 session.connected_at = timezone.now()
@@ -229,7 +237,7 @@ class EvolutionWebhookService:
         if ignored_reason:
             self._reply_skip(session, message_id, ignored_reason, 'messages.upsert')
             return None
-        if message_type in SUPPORTED_MEDIA:
+        if message_type in SUPPORTED_MEDIA and message_type != 'audio':
             try:
                 media = self.provider.download_media(session.instance_name, data)
                 logger.info(
@@ -245,6 +253,7 @@ class EvolutionWebhookService:
             with transaction.atomic():
                 existing = Mensagem.objects.filter(external_message_id=message_id).first()
                 if existing:
+                    self._enqueue_inbound_job(session, existing, data, message)
                     return existing
                 contato, created = Contato.objects.get_or_create(
                     empresa=session.empresa, whatsapp_id=whatsapp_id,
@@ -270,6 +279,11 @@ class EvolutionWebhookService:
                     empresa=session.empresa, atendimento=atendimento, contato=contato,
                     external_message_id=message_id, direcao=Mensagem.DIRECAO_ENTRADA,
                     tipo=message_type[:32], texto=text,
+                    transcription_status=(
+                        Mensagem.TranscriptionStatus.PENDING
+                        if message_type == 'audio'
+                        else Mensagem.TranscriptionStatus.NOT_REQUIRED
+                    ),
                     timestamp_meta=self._timestamp(data.get('messageTimestamp')),
                 )
                 atendimento.last_message_at = inbound.timestamp_meta or inbound.criado_em
@@ -294,14 +308,10 @@ class EvolutionWebhookService:
                 session, message_id, reason, 'messages.upsert', attendance_id=atendimento.pk,
             )
             return inbound
-        enqueue(
-            'whatsapp.automatic_reply', {'message_id': inbound.pk, 'company_id': session.empresa_id},
-            idempotency_key=f'automatic-reply:{message_id}', queue='whatsapp', max_attempts=5,
-            conversation_key=f'company:{session.empresa_id}:attendance:{atendimento.pk}',
-        )
+        queued_job = self._enqueue_inbound_job(session, inbound, data, message)
         logger.info(
-            'whatsapp.webhook.enqueued company_id=%s instance=%s event=automatic_reply message_id=%s',
-            session.empresa_id, session.instance_name, message_id,
+            'whatsapp.webhook.enqueued company_id=%s instance=%s event=%s message_id=%s',
+            session.empresa_id, session.instance_name, queued_job.task_name, message_id,
         )
         logger.info(
             'whatsapp.reply.reason company_id=%s attendance_id=%s message_id=%s reason=eligible_user_message type=%s stage=webhook',
@@ -313,6 +323,30 @@ class EvolutionWebhookService:
         )
         logger.info('evolution.message.persisted company_id=%s instance=%s contact_id=%s attendance_id=%s message_id=%s type=%s', session.empresa_id, session.instance_name, contato.pk, atendimento.pk, message_id, message_type)
         return inbound
+
+    @staticmethod
+    def _enqueue_inbound_job(session, inbound, data, message):
+        conversation_key = f'company:{session.empresa_id}:attendance:{inbound.atendimento_id}'
+        if inbound.tipo == 'audio':
+            audio = message.get('audioMessage') or {}
+            return enqueue(
+                'whatsapp.audio_transcription',
+                {
+                    'message_id': inbound.pk,
+                    'company_id': session.empresa_id,
+                    'session_id': session.pk,
+                    'media_payload': data,
+                    'mime_type': str(audio.get('mimetype') or ''),
+                },
+                idempotency_key=f'audio-transcription:{inbound.external_message_id}',
+                queue='whatsapp', max_attempts=5, conversation_key=conversation_key,
+            )
+        return enqueue(
+            'whatsapp.automatic_reply',
+            {'message_id': inbound.pk, 'company_id': session.empresa_id},
+            idempotency_key=f'automatic-reply:{inbound.external_message_id}',
+            queue='whatsapp', max_attempts=5, conversation_key=conversation_key,
+        )
 
     @staticmethod
     def _message_content(message, data):

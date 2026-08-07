@@ -1,0 +1,34 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Platform{% endblock %} · IAATENDE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Syne+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'platform/platform.css' %}">
+</head>
+<body>
+  <aside class="platform-sidebar">
+    <div class="platform-brand"><span>◆</span><div><strong>IAATENDE</strong><small>PLATFORM MASTER</small></div></div>
+    <nav>
+      <a class="{% if platform_section == 'dashboard' %}active{% endif %}" href="{% url 'platform:dashboard' %}">Dashboard</a>
+      <a class="{% if platform_section == 'companies' %}active{% endif %}" href="{% url 'platform:companies' %}">Empresas</a>
+      <a class="{% if platform_section == 'openai' %}active{% endif %}" href="{% url 'platform:openai' %}">Consumo OpenAI</a>
+      <a class="{% if platform_section == 'finance' %}active{% endif %}" href="{% url 'platform:finance' %}">Financeiro</a>
+      <a class="{% if platform_section == 'infrastructure' %}active{% endif %}" href="{% url 'platform:infrastructure' %}">Infraestrutura</a>
+      <a class="{% if platform_section == 'logs' %}active{% endif %}" href="{% url 'platform:logs' %}">Logs</a>
+      <a class="{% if platform_section == 'subscriptions' %}active{% endif %}" href="{% url 'platform:subscriptions' %}">Assinaturas</a>
+      <a class="{% if platform_section == 'settings' %}active{% endif %}" href="{% url 'platform:settings' %}">Configurações</a>
+    </nav>
+    <form action="{% url 'logout' %}" method="post">{% csrf_token %}<button type="submit">Sair do Platform</button></form>
+  </aside>
+  <main class="platform-main">
+    <header><div><span class="eyebrow">PAINEL GLOBAL · SEM TENANT</span><h1>{% block heading %}Platform{% endblock %}</h1></div><span class="admin-badge">● ADMINISTRADOR (PAULO DEV)</span></header>
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

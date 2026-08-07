@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils.text import slugify
 
-from core.models import CalendarConfiguration, DisponibilidadeSemanal
+from core.models import CalendarConfiguration, DisponibilidadeSemanal, Servico
 
 
 class CalendarConfigurationService:
@@ -45,6 +45,21 @@ class CalendarConfigurationService:
                 'slot_duration_minutes': data['slot_duration_minutes'],
             },
         )
+        # The visible calendar is the only source of truth. Servico remains an
+        # internal reference because existing appointments use a foreign key.
+        services = Servico.objects.select_for_update().filter(empresa=empresa)
+        if config.enabled:
+            service_name = config.display_name.strip()
+            service = services.filter(nome__iexact=service_name).first() or services.first()
+            if service is None:
+                service = Servico(empresa=empresa)
+            services.exclude(pk=service.pk).update(ativo=False)
+            service.nome = service_name
+            service.duracao_minutos = config.slot_duration_minutes
+            service.ativo = True
+            service.save()
+        else:
+            services.update(ativo=False)
         DisponibilidadeSemanal.objects.filter(empresa=empresa).delete()
         if config.enabled:
             rows = []

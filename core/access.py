@@ -77,8 +77,6 @@ class RolePermissionMiddleware:
         'whatsapp_desconectar': 'manage_company',
         'fluxo': 'manage_company',
         'aplicar_template_fluxo': 'manage_company',
-        'agenda_configuracao': 'manage_schedule',
-        'agenda_configuracao_excluir': 'manage_schedule',
         'agendamento_novo': 'manage_schedule',
         'agendamento_editar': 'manage_schedule',
         'agendamento_status': 'manage_schedule',

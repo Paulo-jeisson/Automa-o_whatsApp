@@ -236,10 +236,26 @@ def _dispatch(task_name, payload):
             pk=payload['message_id'], empresa_id=payload['company_id'],
         )
         return send_automatic_reply(message)
+    if task_name == 'whatsapp.audio_transcription':
+        from core.infrastructure.evolution import EvolutionProvider
+        from core.services.ai.transcription import AudioTranscriptionService
+        return AudioTranscriptionService(provider=EvolutionProvider()).process(
+            message_id=payload['message_id'], company_id=payload['company_id'],
+            session_id=payload['session_id'], media_payload=payload['media_payload'],
+            mime_type=payload.get('mime_type', ''),
+        )
     raise ValueError(f'Tarefa não registrada: {task_name}')
 
 
 def _handle_exhausted_job(job, error):
+    if job.task_name == 'whatsapp.audio_transcription':
+        from core.services.ai.transcription import finalize_exhausted_transcription
+        finalize_exhausted_transcription(
+            message_id=job.payload.get('message_id'),
+            company_id=job.payload.get('company_id'),
+            error_type=type(error).__name__,
+        )
+        return
     if job.task_name != 'whatsapp.automatic_reply':
         return
     from core.services.ai.conversation import AIConversationService

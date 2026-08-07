@@ -34,7 +34,7 @@
         </form>
         <div class="audio-transcription-state">
           <span class="audio-icon" aria-hidden="true">♩</span>
-          <div><strong>Transcrição de áudio ativa</strong><p>A IA já entende mensagens de voz automaticamente. Nenhuma configuração necessária.</p></div>
+          {% if audio_transcription_enabled %}<div><strong>Transcrição de áudio ativa</strong><p>A IA entende mensagens de voz automaticamente.</p></div>{% else %}<div><strong>Transcrição de áudio desativada</strong><p>Mensagens de voz recebem uma orientação para serem reenviadas por texto.</p></div>{% endif %}
         </div>
       </div>
       <details class="reference-card prompt-version-details" id="versions">

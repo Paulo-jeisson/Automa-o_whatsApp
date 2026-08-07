@@ -72,6 +72,7 @@ CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
 
 INSTALLED_APPS = [
     'core',
+    'platform_panel',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -196,6 +197,14 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '').strip()
 AI_ENABLED = os.environ.get('AI_ENABLED', 'False').lower() in {'1', 'true', 'yes', 'on'}
 AI_MODEL = os.environ.get('AI_MODEL', 'gpt-5.6').strip()
 AI_TIMEOUT = float(os.environ.get('AI_TIMEOUT', '20'))
+AI_AUDIO_TRANSCRIPTION_ENABLED = os.environ.get(
+    'AI_AUDIO_TRANSCRIPTION_ENABLED', 'False',
+).lower() in {'1', 'true', 'yes', 'on'}
+AI_AUDIO_TRANSCRIPTION_MODEL = os.environ.get(
+    'AI_AUDIO_TRANSCRIPTION_MODEL', 'gpt-transcribe',
+).strip()
+AI_AUDIO_MAX_BYTES = int(os.environ.get('AI_AUDIO_MAX_BYTES', str(20 * 1024 * 1024)))
+AI_AUDIO_CONVERSION_TIMEOUT = int(os.environ.get('AI_AUDIO_CONVERSION_TIMEOUT', '30'))
 AI_CONTEXT_MESSAGE_LIMIT = int(os.environ.get('AI_CONTEXT_MESSAGE_LIMIT', '12'))
 AI_CONTEXT_SUMMARY_TRIGGER = int(os.environ.get('AI_CONTEXT_SUMMARY_TRIGGER', '20'))
 AI_CONTEXT_SUMMARY_MAX_CHARS = int(os.environ.get('AI_CONTEXT_SUMMARY_MAX_CHARS', '2000'))
@@ -218,6 +227,8 @@ TASK_QUEUE_MAX_BACKOFF = int(os.environ.get('TASK_QUEUE_MAX_BACKOFF', '3600'))
 TASK_QUEUE_LEASE_SECONDS = int(os.environ.get('TASK_QUEUE_LEASE_SECONDS', '300'))
 TASK_QUEUE_IDLE_SECONDS = float(os.environ.get('TASK_QUEUE_IDLE_SECONDS', '1'))
 TASK_QUEUE_HEARTBEAT_SECONDS = int(os.environ.get('TASK_QUEUE_HEARTBEAT_SECONDS', '30'))
+TASK_QUEUE_BACKLOG_WARNING_COUNT = int(os.environ.get('TASK_QUEUE_BACKLOG_WARNING_COUNT', '20'))
+TASK_QUEUE_BACKLOG_MAX_AGE_SECONDS = int(os.environ.get('TASK_QUEUE_BACKLOG_MAX_AGE_SECONDS', '60'))
 OPERATIONAL_ALERT_WEBHOOK = os.environ.get('OPERATIONAL_ALERT_WEBHOOK', '')
 
 LOGGING = {

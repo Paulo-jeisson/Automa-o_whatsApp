@@ -18,7 +18,7 @@ from django.views.decorators.http import require_GET, require_POST
 from core.access import company_for_user, ensure_company_for_user
 from core.application.dto import PromptGeneratorInput
 from core.application.prompt_compiler_service import PromptCompilerService
-from core.application.whatsapp_service import WhatsAppSessionService
+from core.application.whatsapp_service import WhatsAppOperationInProgress, WhatsAppSessionService
 from core.domain.exceptions import ProviderUnavailable
 from django.utils import timezone
 from core.models import (
@@ -53,7 +53,12 @@ def whatsapp_action(request, action):
     handler = handlers.get(action)
     if not handler:
         return JsonResponse({'error': 'Ação inválida.'}, status=400)
-    session = handler(empresa)
+    operation_message = ''
+    try:
+        session = handler(empresa)
+    except WhatsAppOperationInProgress as exc:
+        operation_message = str(exc)
+        session = WhatsAppSession.objects.get(empresa=empresa)
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({
             'state': session.state, 'state_label': session.get_state_display(),
@@ -61,7 +66,9 @@ def whatsapp_action(request, action):
             'device_name': session.device_name, 'ping_ms': session.ping_ms,
             'last_error': session.last_error,
         })
-    if session.state == 'CONNECTED' and action == 'connect':
+    if operation_message:
+        messages.warning(request, operation_message)
+    elif session.state == 'CONNECTED' and action == 'connect':
         messages.info(request, 'WhatsApp já está conectado.')
     elif session.last_error:
         messages.error(request, session.last_error)
@@ -164,13 +171,13 @@ def prompt_editor(request):
             if request.POST.get('action') == 'draft':
                 PromptCompilerService.save_draft(
                     empresa=empresa, content=request.POST.get('prompt_content'),
-                    response_delay_seconds=request.POST.get('response_delay_seconds', 3),
+                    response_delay_seconds=request.POST.get('response_delay_seconds', 2),
                 )
                 messages.success(request, 'Rascunho salvo. O prompt ativo não foi alterado.')
             else:
                 version = PromptCompilerService.publish_editor_prompt(
                     empresa=empresa, user=request.user, content=request.POST.get('prompt_content'),
-                    response_delay_seconds=request.POST.get('response_delay_seconds', 3),
+                    response_delay_seconds=request.POST.get('response_delay_seconds', 2),
                 )
                 messages.success(request, f'Prompt publicado como versão {version.version}.')
             return redirect('prompt_editor')
@@ -185,6 +192,9 @@ def prompt_editor(request):
         'draft_prompt': profile.draft_prompt,
         'active_version': active_version,
         'has_unpublished_changes': profile.draft_prompt != profile.generated_prompt,
+        'audio_transcription_enabled': (
+            settings.AI_ENABLED and settings.AI_AUDIO_TRANSCRIPTION_ENABLED
+        ),
         'versions': profile.versions.all()[:30],
     })
 

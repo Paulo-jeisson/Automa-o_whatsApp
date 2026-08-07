@@ -1,0 +1,5 @@
+{% extends 'platform/base.html' %}
+{% block title %}Empresas{% endblock %}{% block heading %}Empresas{% endblock %}
+{% block content %}<div class="panel table-wrap"><table><thead><tr><th>Empresa</th><th>Plano</th><th>Status</th><th>WhatsApp</th><th>Último acesso</th><th>Mensagens/mês</th><th>Consumo IA</th><th>Cliente desde</th></tr></thead><tbody>
+{% for company in companies %}<tr><td><a href="{% url 'platform:company_detail' company.pk %}">{{ company.nome }}</a></td><td>{{ company.subscription.plan.name|default:'—' }}</td><td>{{ company.subscription.get_status_display|default:'Sem assinatura' }}</td><td><span class="status {{ company.whatsapp_session.state|lower }}">{{ company.whatsapp_session.get_state_display|default:'Não configurado' }}</span></td><td>{{ company.usuario.last_login|date:'d/m/Y H:i'|default:'Nunca' }}</td><td>{{ company.messages_month }}</td><td>US$ {{ company.ai_cost_month }}</td><td>{{ company.criada_em|date:'d/m/Y' }}</td></tr>{% empty %}<tr><td colspan="8">Nenhuma empresa cadastrada.</td></tr>{% endfor %}
+</tbody></table></div>{% include 'platform/pagination.html' %}{% endblock %}

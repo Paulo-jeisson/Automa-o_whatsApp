@@ -206,6 +206,22 @@ class ConversationMemoryTests(TestCase):
         self.attendance.refresh_from_db()
         self.assertEqual(self.attendance.summarized_message_count, 4)
 
+    def test_customer_name_rejects_emoji_phone_and_generic_labels(self):
+        service = ConversationMemoryService()
+        for invalid_name in ('🌻', '5511999999999', 'Cliente'):
+            with self.subTest(name=invalid_name):
+                self.contact.nome = invalid_name
+                self.contact.save(update_fields=['nome'])
+                self.assertEqual(service.build(atendimento=self.attendance).customer_name, '')
+
+    def test_customer_name_keeps_a_plausible_person_name(self):
+        self.contact.nome = 'Ana Maria 🌻'
+        self.contact.save(update_fields=['nome'])
+
+        memory = ConversationMemoryService().build(atendimento=self.attendance)
+
+        self.assertEqual(memory.customer_name, 'Ana Maria')
+
     def test_structured_state_accepts_only_known_scalar_fields(self):
         service = ConversationMemoryService()
         state = service.update_state(atendimento=self.attendance, values={

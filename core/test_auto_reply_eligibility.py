@@ -11,6 +11,8 @@ from core.models import (
 )
 from core.services.queue import enqueue, process_job
 from core.services.whatsapp.outbound import automatic_reply_ineligibility
+from core.services.whatsapp.outbound import _refresh_evolution_state_if_needed
+from core.domain.whatsapp import SessionSnapshot, SessionState
 
 
 @override_settings(AI_ENABLED=True, OPENAI_API_KEY='test-only', TASK_QUEUE_EAGER=False)
@@ -95,6 +97,18 @@ class AutomaticReplyEligibilityTests(TestCase):
         self.session.save(update_fields=['state'])
         self.assert_reason('whatsapp_session_disconnected')
 
+    @patch('core.infrastructure.evolution.EvolutionProvider.status')
+    def test_worker_rechecks_remote_state_before_disconnected_skip(self, status):
+        self.session.state = 'CONNECTING'
+        self.session.save(update_fields=['state'])
+        status.return_value = SessionSnapshot(state=SessionState.CONNECTED)
+
+        refreshed = _refresh_evolution_state_if_needed(self.company)
+
+        self.assertEqual(refreshed.state, 'CONNECTED')
+        self.assertIsNone(automatic_reply_ineligibility(self.inbound))
+        status.assert_called_once_with(self.session.instance_name)
+
     def test_prompt_missing_reason(self):
         self.profile.generated_prompt = ''
         self.profile.save(update_fields=['generated_prompt'])
@@ -138,3 +152,37 @@ class AutomaticReplyEligibilityTests(TestCase):
         send_mock.assert_called_once_with(
             self.session.instance_name, self.contact.whatsapp_id, 'Resposta normal da IA',
         )
+
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.mark_as_read')
+    @patch('core.services.whatsapp.outbound.EvolutionProvider.send_text')
+    @patch('core.services.whatsapp.outbound.CompanyAIGateway.reply')
+    def test_ai_handoff_sends_final_acknowledgement_once(self, reply_mock, send_mock, _read_mock):
+        def handoff_and_reply(*, inbound_message):
+            attendance = inbound_message.atendimento
+            state = dict(attendance.conversation_state or {})
+            state.update({
+                'handoff_reason': 'Cliente confirmou o atendimento humano.',
+                'handoff_type': 'HANDOFF_REQUESTED_BY_CUSTOMER',
+            })
+            attendance.current_step = Atendimento.Step.WAITING_HUMAN
+            attendance.automation_enabled = False
+            attendance.conversation_state = state
+            attendance.save(update_fields=[
+                'current_step', 'automation_enabled', 'conversation_state',
+            ])
+            return 'Certo, encaminhei você para nossa equipe.'
+
+        reply_mock.side_effect = handoff_and_reply
+        send_mock.return_value = EvolutionSendResult('eligibility-handoff-out-1')
+
+        from core.services.whatsapp.outbound import send_automatic_reply
+        outbound = send_automatic_reply(self.inbound)
+
+        self.assertIsNotNone(outbound)
+        send_mock.assert_called_once_with(
+            self.session.instance_name,
+            self.contact.whatsapp_id,
+            'Certo, encaminhei você para nossa equipe.',
+        )
+        self.inbound.refresh_from_db()
+        self.assertEqual(automatic_reply_ineligibility(self.inbound), 'human_mode')
